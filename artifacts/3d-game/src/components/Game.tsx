@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Arena } from "./Arena";
 import { getMap } from "../data/maps";
@@ -6,7 +6,9 @@ import { RemotePlayer } from "./RemotePlayer";
 import { FPSControls } from "./FPSControls";
 import { HUD } from "./HUD";
 import { useSocket } from "../hooks/useSocket";
-import type { PlayerState, KillEvent, WeaponId, MapId } from "../types/game";
+import type {
+  PlayerState, KillEvent, WeaponId, MapId, GameMode, Difficulty,
+} from "../types/game";
 import { WEAPONS } from "../types/game";
 
 const MAX_HEALTH = 100;
@@ -14,9 +16,12 @@ const MAX_HEALTH = 100;
 interface Props {
   nickname: string;
   mapId: MapId;
+  mode: GameMode;
+  botCount: number;
+  difficulty: Difficulty;
 }
 
-export function Game({ nickname, mapId }: Props) {
+export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
   const [self, setSelf] = useState<PlayerState | null>(null);
   const playersRef = useRef<Map<string, PlayerState>>(new Map());
   const [, forceUpdate] = useState(0);
@@ -33,8 +38,14 @@ export function Game({ nickname, mapId }: Props) {
   const [isShooting, setIsShooting] = useState(false);
 
   const selfIdRef = useRef("");
-
   const map = getMap(mapId);
+
+  const joinPayload = useMemo(() => ({
+    nickname,
+    solo: mode === "solo",
+    botCount,
+    difficulty,
+  }), [nickname, mode, botCount, difficulty]);
 
   const onInit = useCallback((initSelf: PlayerState, others: PlayerState[]) => {
     selfIdRef.current = initSelf.id;
@@ -54,7 +65,10 @@ export function Game({ nickname, mapId }: Props) {
   const onPlayerMoved = useCallback(
     (data: { id: string; position: { x: number; y: number; z: number }; rotation: { x: number; y: number } }) => {
       const p = playersRef.current.get(data.id);
-      if (p) { p.position = data.position; p.rotation = data.rotation; }
+      if (p) {
+        p.position = data.position;
+        p.rotation = data.rotation;
+      }
     }, []);
 
   const onPlayerHit = useCallback((data: { id: string; health: number }) => {
@@ -73,11 +87,11 @@ export function Game({ nickname, mapId }: Props) {
       setAlive(false);
     } else {
       const p = playersRef.current.get(data.id);
-      if (p) p.alive = false;
+      if (p) { p.alive = false; }
       forceUpdate((n) => n + 1);
     }
     if (data.killerId === selfIdRef.current) setKills(data.kills);
-    setKillFeed((prev) => [...prev, { ...data, timestamp: Date.now() }]);
+    setKillFeed((prev) => [...prev.slice(-4), { ...data, timestamp: Date.now() }]);
     setTimeout(() => setKillFeed((prev) => prev.slice(1)), 4000);
   }, []);
 
@@ -100,7 +114,7 @@ export function Game({ nickname, mapId }: Props) {
   }, []);
 
   const { sendMove, sendShoot } = useSocket(
-    nickname, onInit, onPlayerJoined, onPlayerMoved,
+    joinPayload, onInit, onPlayerJoined, onPlayerMoved,
     onPlayerHit, onPlayerDied, onPlayerRespawned, onPlayerLeft,
   );
 
@@ -182,6 +196,28 @@ export function Game({ nickname, mapId }: Props) {
           mapName={map.name}
           playerCount={playerCount}
         />
+      )}
+
+      {mode === "solo" && self && (
+        <div
+          style={{
+            position: "fixed",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(0,0,0,0.55)",
+            color: "#ffd700",
+            fontFamily: "'Black Han Sans', sans-serif",
+            fontSize: 13,
+            letterSpacing: 2,
+            padding: "4px 18px",
+            borderRadius: 20,
+            border: "1px solid rgba(255,215,0,0.3)",
+            pointerEvents: "none",
+          }}
+        >
+          🤖 SOLO MODE
+        </div>
       )}
 
       {!locked && self && alive && (

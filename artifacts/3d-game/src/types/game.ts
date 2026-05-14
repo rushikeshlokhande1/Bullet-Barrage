@@ -1,4 +1,6 @@
 export type MapId = "cracked" | "sandstone" | "cyber";
+export type GameMode = "multiplayer" | "solo";
+export type Difficulty = 0 | 1 | 2;
 
 export interface PlayerState {
   id: string;
@@ -74,3 +76,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     modelScale: [0.1, 0.1, 1.0],
   },
 };
+
+export interface JoinPayload {
+  nickname: string;
+  solo: boolean;
+  botCount: number;
+  difficulty: Difficulty;
+}

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import type { PlayerState, KillEvent } from "../types/game";
+import type { PlayerState, KillEvent, JoinPayload } from "../types/game";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function useSocket(
-  nickname: string | null,
+  joinPayload: JoinPayload | null,
   onInit: (self: PlayerState, others: PlayerState[]) => void,
   onPlayerJoined: (p: PlayerState) => void,
   onPlayerMoved: (data: { id: string; position: { x: number; y: number; z: number }; rotation: { x: number; y: number } }) => void,
@@ -17,7 +17,7 @@ export function useSocket(
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (!nickname) return;
+    if (!joinPayload) return;
 
     const socket = io(window.location.origin, {
       path: `${BASE}/ws/socket.io`,
@@ -27,7 +27,7 @@ export function useSocket(
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      socket.emit("join", nickname);
+      socket.emit("join", joinPayload);
     });
 
     socket.on("init", ({ self, players }: { self: PlayerState; players: PlayerState[] }) => {
@@ -45,7 +45,7 @@ export function useSocket(
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [nickname]);
+  }, [joinPayload]);
 
   const sendMove = useCallback(
     (position: { x: number; y: number; z: number }, rotation: { x: number; y: number }) => {

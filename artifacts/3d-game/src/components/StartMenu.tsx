@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { MapId } from "../types/game";
+import type { MapId, GameMode, Difficulty } from "../types/game";
 import { ALL_MAP_IDS, getMap } from "../data/maps";
 
 const MAP_PREVIEW: Record<MapId, string> = {
@@ -8,17 +8,45 @@ const MAP_PREVIEW: Record<MapId, string> = {
   cyber: "🌌",
 };
 
+const DIFFICULTIES = [
+  { label: "Easy",   emoji: "😊", bots: 3, diff: 0 as Difficulty },
+  { label: "Normal", emoji: "😤", bots: 5, diff: 1 as Difficulty },
+  { label: "Hard",   emoji: "💀", bots: 7, diff: 2 as Difficulty },
+];
+
+interface StartPayload {
+  nickname: string;
+  mapId: MapId;
+  mode: GameMode;
+  botCount: number;
+  difficulty: Difficulty;
+}
+
 interface Props {
-  onStart: (nickname: string, mapId: MapId) => void;
+  onStart: (payload: StartPayload) => void;
 }
 
 export function StartMenu({ onStart }: Props) {
   const [nick, setNick] = useState("");
   const [mapId, setMapId] = useState<MapId>("cracked");
+  const [mode, setMode] = useState<GameMode>("multiplayer");
+  const [diffIdx, setDiffIdx] = useState(1);
+
+  const diff = DIFFICULTIES[diffIdx];
+
+  const handlePlay = () => {
+    if (!nick.trim()) return;
+    onStart({
+      nickname: nick.trim(),
+      mapId,
+      mode,
+      botCount: mode === "solo" ? diff.bots : 0,
+      difficulty: mode === "solo" ? diff.diff : 1,
+    });
+  };
 
   return (
     <div className="menu-bg">
-      {/* Egg decorations */}
       <div className="egg-deco egg-tl">🥚</div>
       <div className="egg-deco egg-tr">🥚</div>
       <div className="egg-deco egg-bl">🥚</div>
@@ -41,11 +69,44 @@ export function StartMenu({ onStart }: Props) {
             maxLength={20}
             value={nick}
             onChange={(e) => setNick(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && nick.trim() && onStart(nick.trim(), mapId)}
+            onKeyDown={(e) => e.key === "Enter" && handlePlay()}
             autoFocus
           />
 
-          <label className="form-label" style={{ marginTop: 16 }}>SELECT MAP</label>
+          {/* Mode toggle */}
+          <div className="mode-toggle">
+            <button
+              className={`mode-btn ${mode === "multiplayer" ? "active" : ""}`}
+              onClick={() => setMode("multiplayer")}
+            >
+              🌐 Multiplayer
+            </button>
+            <button
+              className={`mode-btn ${mode === "solo" ? "active" : ""}`}
+              onClick={() => setMode("solo")}
+            >
+              🤖 Solo vs Bots
+            </button>
+          </div>
+
+          {/* Difficulty selector (solo only) */}
+          {mode === "solo" && (
+            <div className="diff-select">
+              {DIFFICULTIES.map((d, i) => (
+                <button
+                  key={d.label}
+                  className={`diff-btn ${diffIdx === i ? "active" : ""}`}
+                  onClick={() => setDiffIdx(i)}
+                >
+                  <span className="diff-emoji">{d.emoji}</span>
+                  <span className="diff-label">{d.label}</span>
+                  <span className="diff-bots">{d.bots} bots</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <label className="form-label" style={{ marginTop: 14 }}>SELECT MAP</label>
           <div className="map-grid">
             {ALL_MAP_IDS.map((id) => {
               const m = getMap(id);
@@ -64,11 +125,8 @@ export function StartMenu({ onStart }: Props) {
             })}
           </div>
 
-          <button
-            className="menu-play-btn"
-            onClick={() => nick.trim() && onStart(nick.trim(), mapId)}
-          >
-            PLAY NOW
+          <button className="menu-play-btn" onClick={handlePlay}>
+            {mode === "solo" ? `PLAY SOLO  ${diff.emoji}` : "PLAY NOW"}
           </button>
         </div>
 

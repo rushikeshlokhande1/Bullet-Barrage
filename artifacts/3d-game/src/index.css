@@ -294,6 +294,44 @@ canvas { display: block; }
 }
 .map-card.selected .map-card-name { color: #ffd700; }
 
+/* ── Mode toggle ───────────────────────────────────────────── */
+.mode-toggle {
+  display: flex; gap: 8px; margin-top: 16px;
+}
+.mode-btn {
+  flex: 1; padding: 9px 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #888; font-family: inherit; font-size: 12px;
+  letter-spacing: 1px; cursor: pointer; transition: all 0.15s;
+  border-radius: 4px;
+}
+.mode-btn:hover { border-color: #ffd700; color: #ffd700; }
+.mode-btn.active {
+  background: rgba(255,215,0,0.15);
+  border-color: #ffd700; color: #ffd700;
+}
+
+/* ── Difficulty ─────────────────────────────────────────────── */
+.diff-select {
+  display: flex; gap: 8px; margin-top: 12px;
+}
+.diff-btn {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; padding: 8px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #888; font-family: inherit; cursor: pointer;
+  transition: all 0.15s; border-radius: 4px;
+}
+.diff-btn:hover { border-color: #ffd700; }
+.diff-btn.active { background: rgba(255,215,0,0.15); border-color: #ffd700; }
+.diff-emoji { font-size: 18px; line-height: 1; }
+.diff-label { font-size: 11px; letter-spacing: 2px; color: #ccc; }
+.diff-bots { font-size: 10px; color: #555; }
+.diff-btn.active .diff-label { color: #ffd700; }
+.diff-btn.active .diff-bots { color: #aa9000; }
+
 .menu-play-btn {
   width: 100%; padding: 15px;
   background: #ffd700; border: none;
