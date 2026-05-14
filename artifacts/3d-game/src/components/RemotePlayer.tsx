@@ -11,62 +11,83 @@ interface Props {
 
 export function RemotePlayer({ player }: Props) {
   const groupRef = useRef<THREE.Group>(null!);
+  const bobRef = useRef(0);
   const targetPos = useRef(new THREE.Vector3(player.position.x, player.position.y, player.position.z));
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!groupRef.current) return;
     targetPos.current.set(player.position.x, player.position.y, player.position.z);
-    groupRef.current.position.lerp(targetPos.current, 0.25);
+    groupRef.current.position.lerp(targetPos.current, 0.22);
     groupRef.current.rotation.y = THREE.MathUtils.lerp(
       groupRef.current.rotation.y,
       player.rotation.y,
-      0.25,
+      0.22,
     );
+    bobRef.current += delta * 4;
   });
 
   if (!player.alive) return null;
 
   const wep = WEAPONS[player.weapon ?? "rifle"];
+  const healthPct = player.health / 100;
+  const barColor = healthPct > 0.6 ? "#4caf50" : healthPct > 0.3 ? "#ff9800" : "#f44336";
 
   return (
     <group ref={groupRef} position={[player.position.x, player.position.y, player.position.z]}>
-      {/* Body */}
-      <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[0.75, 1.4, 0.55]} />
+      {/* Egg body (main oval) */}
+      <mesh position={[0, 0.75, 0]} scale={[1, 1.35, 1]}>
+        <sphereGeometry args={[0.42, 10, 10]} />
         <meshLambertMaterial color={player.color} />
       </mesh>
-      {/* Egg head */}
-      <mesh position={[0, 1.0, 0]}>
-        <sphereGeometry args={[0.38, 8, 8]} />
-        <meshLambertMaterial color={player.color} />
-      </mesh>
+
       {/* Eyes */}
-      <mesh position={[0.14, 1.05, -0.3]}>
-        <sphereGeometry args={[0.07, 6, 6]} />
-        <meshLambertMaterial color="#000" />
+      <mesh position={[0.17, 1.0, -0.33]} scale={[1, 1.2, 1]}>
+        <sphereGeometry args={[0.09, 7, 7]} />
+        <meshLambertMaterial color="#111" />
       </mesh>
-      <mesh position={[-0.14, 1.05, -0.3]}>
-        <sphereGeometry args={[0.07, 6, 6]} />
-        <meshLambertMaterial color="#000" />
+      <mesh position={[-0.17, 1.0, -0.33]} scale={[1, 1.2, 1]}>
+        <sphereGeometry args={[0.09, 7, 7]} />
+        <meshLambertMaterial color="#111" />
       </mesh>
+      {/* Eye shine */}
+      <mesh position={[0.19, 1.03, -0.4]}>
+        <sphereGeometry args={[0.03, 5, 5]} />
+        <meshLambertMaterial color="#fff" />
+      </mesh>
+      <mesh position={[-0.15, 1.03, -0.4]}>
+        <sphereGeometry args={[0.03, 5, 5]} />
+        <meshLambertMaterial color="#fff" />
+      </mesh>
+
       {/* Gun */}
-      <mesh position={[0.45, 0.2, -0.3]} rotation={[0, 0, 0]}>
+      <mesh position={[0.5, 0.7, -0.2]} rotation={[0, 0.1, 0]}>
         <boxGeometry args={wep.modelScale} />
         <meshLambertMaterial color={wep.color} />
       </mesh>
-      {/* Nametag */}
-      <Html position={[0, 1.8, 0]} center distanceFactor={15} zIndexRange={[1, 2]}>
+      {/* Gun barrel */}
+      <mesh position={[0.5, 0.7, -0.2 - wep.modelScale[2] / 2 - 0.1]} rotation={[0, 0.1, 0]}>
+        <boxGeometry args={[0.05, 0.05, 0.2]} />
+        <meshLambertMaterial color="#333" />
+      </mesh>
+
+      {/* Health bar + nametag */}
+      <Html position={[0, 1.8, 0]} center distanceFactor={14} zIndexRange={[1, 2]}>
         <div style={{
-          background: "rgba(0,0,0,0.7)",
-          color: "#fff",
-          padding: "2px 6px",
-          fontSize: 11,
-          whiteSpace: "nowrap",
-          fontFamily: "monospace",
-          borderLeft: `3px solid ${player.color}`,
-          pointerEvents: "none",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+          pointerEvents: "none", minWidth: 80,
         }}>
-          {player.nickname} &nbsp;❤{player.health}
+          <div style={{
+            background: "rgba(0,0,0,0.75)", color: "#fff",
+            padding: "2px 8px", fontSize: 11, whiteSpace: "nowrap",
+            fontFamily: "Impact, Arial Black, sans-serif",
+            letterSpacing: 1, borderRadius: 2,
+            borderBottom: `2px solid ${player.color}`,
+          }}>
+            {player.nickname}
+          </div>
+          <div style={{ width: 60, height: 5, background: "rgba(0,0,0,0.5)", borderRadius: 3 }}>
+            <div style={{ width: `${player.health}%`, height: "100%", background: barColor, borderRadius: 3, transition: "width 0.1s" }} />
+          </div>
         </div>
       </Html>
     </group>

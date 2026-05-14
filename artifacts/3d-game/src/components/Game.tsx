@@ -26,18 +26,15 @@ export function Game({ nickname, mapId }: Props) {
   const [killFeed, setKillFeed] = useState<KillEvent[]>([]);
   const [ammo, setAmmo] = useState(WEAPONS["rifle"].ammo);
   const [reloading, setReloading] = useState(false);
-  const [showMuzzleFlash, setShowMuzzleFlash] = useState(false);
   const [showHitIndicator, setShowHitIndicator] = useState(false);
   const [showDamage, setShowDamage] = useState(false);
   const [locked, setLocked] = useState(false);
   const [currentWeapon, setCurrentWeapon] = useState<WeaponId>("rifle");
+  const [isShooting, setIsShooting] = useState(false);
 
   const selfIdRef = useRef("");
-  const selfRef = useRef<PlayerState | null>(null);
 
   const map = getMap(mapId);
-
-  useEffect(() => { selfRef.current = self; }, [self]);
 
   const onInit = useCallback((initSelf: PlayerState, others: PlayerState[]) => {
     selfIdRef.current = initSelf.id;
@@ -64,7 +61,7 @@ export function Game({ nickname, mapId }: Props) {
     if (data.id === selfIdRef.current) {
       setHealth(data.health);
       setShowDamage(true);
-      setTimeout(() => setShowDamage(false), 200);
+      setTimeout(() => setShowDamage(false), 250);
     } else {
       const p = playersRef.current.get(data.id);
       if (p) p.health = data.health;
@@ -111,11 +108,6 @@ export function Game({ nickname, mapId }: Props) {
     setAmmo(a); setReloading(r);
   }, []);
 
-  const handleMuzzleFlash = useCallback(() => {
-    setShowMuzzleFlash(true);
-    setTimeout(() => setShowMuzzleFlash(false), 80);
-  }, []);
-
   const handleHitConfirmed = useCallback(() => {
     setShowHitIndicator(true);
     setTimeout(() => setShowHitIndicator(false), 150);
@@ -134,7 +126,7 @@ export function Game({ nickname, mapId }: Props) {
   }, []);
 
   const remotePlayers = Array.from(playersRef.current.values());
-  const [fogColor, fogNear, fogFar] = map.fog;
+  const playerCount = remotePlayers.length + (self ? 1 : 0);
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: map.sky }}>
@@ -143,13 +135,12 @@ export function Game({ nickname, mapId }: Props) {
         style={{ width: "100%", height: "100%" }}
         gl={{ antialias: false }}
       >
-        {/* Bright lighting */}
         <color attach="background" args={[map.sky]} />
-        <ambientLight intensity={1.8} />
-        <directionalLight position={[10, 20, 5]} intensity={1.5} />
-        <directionalLight position={[-10, 10, -5]} intensity={0.8} color="#ffffee" />
-        <hemisphereLight args={["#ffffff", "#333344", 0.6]} />
-        <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+        <ambientLight intensity={2.2} />
+        <directionalLight position={[15, 25, 10]} intensity={1.8} />
+        <directionalLight position={[-10, 15, -10]} intensity={1.0} color="#fffbe8" />
+        <hemisphereLight args={["#ffffff", "#446644", 0.8]} />
+        <fog attach="fog" args={[map.fogColor, map.fogNear, map.fogFar]} />
 
         <Arena mapId={mapId} />
 
@@ -164,11 +155,13 @@ export function Game({ nickname, mapId }: Props) {
             onMove={sendMove}
             onShoot={sendShoot}
             onAmmoChange={handleAmmoChange}
-            onMuzzleFlash={handleMuzzleFlash}
+            onMuzzleFlash={() => {}}
             onHitConfirmed={handleHitConfirmed}
             onWeaponChange={handleWeaponChange}
             alive={alive}
             currentWeapon={currentWeapon}
+            isShooting={isShooting}
+            setIsShooting={setIsShooting}
           />
         )}
       </Canvas>
@@ -183,20 +176,26 @@ export function Game({ nickname, mapId }: Props) {
           killFeed={killFeed}
           ammo={ammo}
           reloading={reloading}
-          showMuzzleFlash={showMuzzleFlash}
           showHitIndicator={showHitIndicator}
           showDamage={showDamage}
           currentWeapon={currentWeapon}
           mapName={map.name}
+          playerCount={playerCount}
         />
       )}
 
       {!locked && self && alive && (
-        <div className="click-to-play">Click to capture mouse &nbsp;·&nbsp; ESC to release</div>
+        <div className="lock-prompt">
+          CLICK TO PLAY
+          <span className="lock-prompt-sub">ESC to release mouse</span>
+        </div>
       )}
 
       {!self && (
-        <div className="click-to-play">Connecting to server...</div>
+        <div className="lock-prompt">
+          CONNECTING...
+          <span className="lock-prompt-sub">Please wait</span>
+        </div>
       )}
     </div>
   );

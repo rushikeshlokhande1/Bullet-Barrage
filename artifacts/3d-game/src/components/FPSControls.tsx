@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { useRef, useEffect, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { FirstPersonGun } from "./FirstPersonGun";
 import type { PlayerState, WeaponId } from "../types/game";
 import { WEAPONS } from "../types/game";
 
@@ -12,7 +13,7 @@ const PLAYER_HEIGHT = 1.75;
 interface Props {
   self: PlayerState;
   players: Map<string, PlayerState>;
-  onMove: (position: { x: number; y: number; z: number }, rotation: { x: number; y: number }) => void;
+  onMove: (pos: { x: number; y: number; z: number }, rot: { x: number; y: number }) => void;
   onShoot: (targetId: string, damage: number) => void;
   onAmmoChange: (ammo: number, reloading: boolean) => void;
   onMuzzleFlash: () => void;
@@ -20,21 +21,16 @@ interface Props {
   onWeaponChange: (w: WeaponId) => void;
   alive: boolean;
   currentWeapon: WeaponId;
+  isShooting: boolean;
+  setIsShooting: (v: boolean) => void;
 }
 
 const keys: Record<string, boolean> = {};
 
 export function FPSControls({
-  self,
-  players,
-  onMove,
-  onShoot,
-  onAmmoChange,
-  onMuzzleFlash,
-  onHitConfirmed,
-  onWeaponChange,
-  alive,
-  currentWeapon,
+  self, players, onMove, onShoot, onAmmoChange,
+  onMuzzleFlash, onHitConfirmed, onWeaponChange,
+  alive, currentWeapon, isShooting, setIsShooting,
 }: Props) {
   const { camera, gl } = useThree();
   const pos = useRef(new THREE.Vector3(self.position.x, PLAYER_HEIGHT, self.position.z));
@@ -48,6 +44,7 @@ export function FPSControls({
   const lastShotRef = useRef(0);
   const lockedRef = useRef(false);
   const weaponRef = useRef<WeaponId>(currentWeapon);
+  const shootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     weaponRef.current = currentWeapon;
@@ -59,6 +56,8 @@ export function FPSControls({
   useEffect(() => {
     pos.current.set(self.position.x, PLAYER_HEIGHT, self.position.z);
     vel.current.set(0, 0, 0);
+    yaw.current = 0;
+    pitch.current = 0;
   }, [self.position.x, self.position.z]);
 
   useEffect(() => {
@@ -68,9 +67,9 @@ export function FPSControls({
       if (e.code === "KeyR" && !reloadingRef.current && ammoRef.current < WEAPONS[weaponRef.current].ammo) {
         startReload();
       }
-      if (e.code === "Digit1") { onWeaponChange("rifle"); }
-      if (e.code === "Digit2") { onWeaponChange("shotgun"); }
-      if (e.code === "Digit3") { onWeaponChange("sniper"); }
+      if (e.code === "Digit1") onWeaponChange("rifle");
+      if (e.code === "Digit2") onWeaponChange("shotgun");
+      if (e.code === "Digit3") onWeaponChange("sniper");
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -107,14 +106,13 @@ export function FPSControls({
   }, [gl]);
 
   const startReload = useCallback(() => {
-    const wep = WEAPONS[weaponRef.current];
     reloadingRef.current = true;
     onAmmoChange(0, true);
     setTimeout(() => {
       reloadingRef.current = false;
       ammoRef.current = WEAPONS[weaponRef.current].ammo;
       onAmmoChange(WEAPONS[weaponRef.current].ammo, false);
-    }, wep.reloadTime);
+    }, WEAPONS[weaponRef.current].reloadTime);
   }, [onAmmoChange]);
 
   useEffect(() => {
@@ -131,12 +129,15 @@ export function FPSControls({
       ammoRef.current--;
       onAmmoChange(ammoRef.current, false);
       onMuzzleFlash();
+      setIsShooting(true);
+      if (shootTimerRef.current) clearTimeout(shootTimerRef.current);
+      shootTimerRef.current = setTimeout(() => setIsShooting(false), 80);
       if (ammoRef.current === 0) startReload();
 
       for (let p = 0; p < wep.pellets; p++) {
-        const spreadX = (Math.random() - 0.5) * wep.spread * 2;
-        const spreadY = (Math.random() - 0.5) * wep.spread * 2;
-        const dir = new THREE.Vector3(spreadX, spreadY, -1)
+        const sx = (Math.random() - 0.5) * wep.spread * 2;
+        const sy = (Math.random() - 0.5) * wep.spread * 2;
+        const dir = new THREE.Vector3(sx, sy, -1)
           .applyEuler(new THREE.Euler(pitch.current, yaw.current, 0, "YXZ"))
           .normalize();
 
@@ -145,12 +146,12 @@ export function FPSControls({
 
         for (const [id, pl] of players) {
           if (!pl.alive) continue;
-          const pPos = new THREE.Vector3(pl.position.x, pl.position.y + 0.8, pl.position.z);
+          const pPos = new THREE.Vector3(pl.position.x, pl.position.y + 0.75, pl.position.z);
           const dist = pos.current.distanceTo(pPos);
           if (dist < closestDist) {
             const diff = pPos.clone().sub(pos.current).normalize();
             const angle = dir.angleTo(diff);
-            const hitRadius = 0.1 + (0.3 / Math.max(dist, 1));
+            const hitRadius = 0.12 + (0.25 / Math.max(dist, 1));
             if (angle < hitRadius) {
               closestDist = dist;
               closestId = id;
@@ -166,15 +167,14 @@ export function FPSControls({
     };
     window.addEventListener("mousedown", onMouseDown);
     return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload]);
+  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload, setIsShooting]);
 
   useFrame((_, delta) => {
     if (!alive) return;
     const dt = Math.min(delta, 0.05);
 
     const euler = new THREE.Euler(pitch.current, yaw.current, 0, "YXZ");
-    const q = new THREE.Quaternion().setFromEuler(euler);
-    camera.quaternion.copy(q);
+    camera.quaternion.setFromEuler(euler);
 
     const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, yaw.current, 0));
     const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, yaw.current, 0));
@@ -205,9 +205,8 @@ export function FPSControls({
       vel.current.y = 0;
       isGrounded.current = true;
     }
-
-    pos.current.x = Math.max(-33, Math.min(33, pos.current.x));
-    pos.current.z = Math.max(-33, Math.min(33, pos.current.z));
+    pos.current.x = Math.max(-36, Math.min(36, pos.current.x));
+    pos.current.z = Math.max(-36, Math.min(36, pos.current.z));
 
     camera.position.copy(pos.current);
 
@@ -221,5 +220,5 @@ export function FPSControls({
     }
   });
 
-  return null;
+  return <FirstPersonGun weaponId={currentWeapon} isShooting={isShooting} />;
 }

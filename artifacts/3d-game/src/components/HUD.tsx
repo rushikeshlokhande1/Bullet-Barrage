@@ -10,82 +10,105 @@ interface Props {
   killFeed: KillEvent[];
   ammo: number;
   reloading: boolean;
-  showMuzzleFlash: boolean;
   showHitIndicator: boolean;
   showDamage: boolean;
   currentWeapon: WeaponId;
   mapName: string;
+  playerCount: number;
 }
 
 export function HUD({
   health, maxHealth, kills, alive, nickname, killFeed,
-  ammo, reloading, showMuzzleFlash, showHitIndicator,
-  showDamage, currentWeapon, mapName,
+  ammo, reloading, showHitIndicator, showDamage,
+  currentWeapon, mapName, playerCount,
 }: Props) {
-  const pct = (health / maxHealth) * 100;
-  const fillClass = pct > 60 ? "" : pct > 30 ? "medium" : "low";
+  const pct = Math.max(0, (health / maxHealth) * 100);
   const wep = WEAPONS[currentWeapon];
+  const hpColor = pct > 60 ? "#4caf50" : pct > 30 ? "#ff9800" : "#f44336";
 
   return (
     <div className="hud">
-      <div className="crosshair" />
-
-      {showMuzzleFlash && <div className="muzzle-flash active" />}
-      {showHitIndicator && <div className="hit-indicator active" />}
-      {showDamage && <div className="damage-overlay active" />}
-
-      {!alive && (
-        <div className="respawn-overlay">
-          <div className="respawn-text">YOU DIED</div>
-          <div className="respawn-hint">Respawning in 3s...</div>
-        </div>
-      )}
-
-      <div className="player-name-display">
-        <span>{nickname}</span>
-        <span style={{ color: "#555", marginLeft: 8, fontSize: 11 }}>{mapName}</span>
+      {/* Crosshair */}
+      <div className="crosshair-wrap">
+        <div className="ch-h" /><div className="ch-v" />
+        <div className="ch-dot" />
       </div>
 
-      <div className="kills-display">
-        <div className="kills-label">Kills</div>
-        <div className="kills-value">{kills}</div>
+      {/* Hit flash */}
+      {showHitIndicator && <div className="hit-ring" />}
+      {showDamage && <div className="damage-vignette" />}
+
+      {/* Top-left: map + player count */}
+      <div className="hud-topleft">
+        <div className="map-badge">{mapName}</div>
+        <div className="player-count">🥚 {playerCount} online</div>
       </div>
 
-      <div className="health-bar-container">
-        <div className="health-label">Health &nbsp;{health}</div>
-        <div className="health-bar-bg">
-          <div className={`health-bar-fill ${fillClass}`} style={{ width: `${pct}%` }} />
+      {/* Top-right: kills */}
+      <div className="hud-topright">
+        <div className="kills-box">
+          <div className="kills-num">{kills}</div>
+          <div className="kills-lbl">KILLS</div>
         </div>
       </div>
 
-      <div className="weapon-hud">
-        <div className="weapon-slots">
+      {/* Bottom bar */}
+      <div className="hud-bottom">
+        {/* Health */}
+        <div className="hp-block">
+          <div className="hp-icon">🥚</div>
+          <div className="hp-info">
+            <div className="hp-track">
+              <div className="hp-fill" style={{ width: `${pct}%`, background: hpColor }} />
+            </div>
+            <div className="hp-num">{health}<span className="hp-max">/{maxHealth}</span></div>
+          </div>
+        </div>
+
+        {/* Center: weapon slots */}
+        <div className="weapon-bar">
           {(["rifle", "shotgun", "sniper"] as WeaponId[]).map((id, i) => (
-            <div key={id} className={`weapon-slot ${currentWeapon === id ? "active" : ""}`}>
-              <span className="slot-key">{i + 1}</span>
-              <span className="slot-name">{WEAPONS[id].name}</span>
+            <div key={id} className={`wslot ${currentWeapon === id ? "active" : ""}`}>
+              <span className="wslot-key">{i + 1}</span>
+              <span className="wslot-name">{WEAPONS[id].name}</span>
             </div>
           ))}
         </div>
-        <div className="ammo-display">
-          <div className="ammo-label">{wep.name}</div>
+
+        {/* Ammo */}
+        <div className="ammo-block">
           {reloading ? (
-            <div className="reloading-text">Reloading...</div>
+            <div className="reload-text">RELOADING...</div>
           ) : (
-            <div className="ammo-value">{ammo}<span style={{ color: "#666" }}>/{wep.ammo}</span></div>
+            <>
+              <div className="ammo-cur">{ammo}</div>
+              <div className="ammo-sep"> / </div>
+              <div className="ammo-max">{wep.ammo}</div>
+            </>
           )}
+          <div className="wep-name">{wep.name}</div>
         </div>
       </div>
 
+      {/* Kill feed */}
       <div className="killfeed">
-        {killFeed.slice(-5).map((k) => (
-          <div key={k.id + k.timestamp} className="killfeed-item">
-            <span style={{ color: "#e74c3c" }}>{k.killerNickname}</span>
-            {" ⚔ "}
-            <span style={{ color: "#aaa" }}>a player</span>
+        {killFeed.slice(-6).map((k) => (
+          <div key={k.id + k.timestamp} className="kf-item">
+            <span className="kf-killer">{k.killerNickname}</span>
+            <span className="kf-icon"> 🍳 </span>
+            <span className="kf-victim">a player</span>
           </div>
         ))}
       </div>
+
+      {/* Death overlay */}
+      {!alive && (
+        <div className="death-overlay">
+          <div className="death-icon">🥚</div>
+          <div className="death-title">YOU GOT CRACKED!</div>
+          <div className="death-sub">Respawning in 3s...</div>
+        </div>
+      )}
     </div>
   );
 }
