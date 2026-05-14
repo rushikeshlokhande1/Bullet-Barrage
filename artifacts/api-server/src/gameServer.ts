@@ -13,11 +13,13 @@ interface Player {
   deaths: number;
   alive: boolean;
   color: string;
+  weapon: string;
 }
 
 const PLAYER_COLORS = [
   "#e74c3c", "#3498db", "#2ecc71", "#f39c12",
   "#9b59b6", "#1abc9c", "#e67e22", "#e91e63",
+  "#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4",
 ];
 
 const MAX_HEALTH = 100;
@@ -26,19 +28,18 @@ const RESPAWN_DELAY = 3000;
 const players = new Map<string, Player>();
 
 const SPAWN_POINTS = [
-  { x: 0, y: 1, z: 0 },
-  { x: 10, y: 1, z: 10 },
-  { x: -10, y: 1, z: 10 },
-  { x: 10, y: 1, z: -10 },
-  { x: -10, y: 1, z: -10 },
+  { x: 0, y: 0.8, z: -20 },
+  { x: 0, y: 0.8, z: 20 },
+  { x: 20, y: 0.8, z: 0 },
+  { x: -20, y: 0.8, z: 0 },
+  { x: 14, y: 0.8, z: 14 },
+  { x: -14, y: 0.8, z: 14 },
+  { x: 14, y: 0.8, z: -14 },
+  { x: -14, y: 0.8, z: -14 },
 ];
 
 function getRandomSpawn() {
-  return SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
-}
-
-function getPlayerColor(index: number) {
-  return PLAYER_COLORS[index % PLAYER_COLORS.length];
+  return { ...SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)] };
 }
 
 export function createGameServer(app: Express) {
@@ -53,17 +54,18 @@ export function createGameServer(app: Express) {
 
     socket.on("join", (nickname: string) => {
       const spawn = getRandomSpawn();
-      const colorIndex = players.size;
+      const colorIndex = players.size % PLAYER_COLORS.length;
       const player: Player = {
         id: socket.id,
-        nickname: nickname.slice(0, 20) || "Player",
-        position: { ...spawn },
+        nickname: String(nickname).slice(0, 20) || "Player",
+        position: spawn,
         rotation: { x: 0, y: 0 },
         health: MAX_HEALTH,
         kills: 0,
         deaths: 0,
         alive: true,
-        color: getPlayerColor(colorIndex),
+        color: PLAYER_COLORS[colorIndex],
+        weapon: "rifle",
       };
       players.set(socket.id, player);
 
@@ -71,21 +73,23 @@ export function createGameServer(app: Express) {
         self: player,
         players: Array.from(players.values()).filter((p) => p.id !== socket.id),
       });
-
       socket.broadcast.emit("playerJoined", player);
       logger.info({ id: socket.id, nickname: player.nickname }, "Player joined");
     });
 
     socket.on("move", (data: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number } }) => {
-      const player = players.get(socket.id);
-      if (!player || !player.alive) return;
-      player.position = data.position;
-      player.rotation = data.rotation;
-      socket.broadcast.emit("playerMoved", {
-        id: socket.id,
-        position: data.position,
-        rotation: data.rotation,
-      });
+      const p = players.get(socket.id);
+      if (!p || !p.alive) return;
+      p.position = data.position;
+      p.rotation = data.rotation;
+      socket.broadcast.emit("playerMoved", { id: socket.id, position: data.position, rotation: data.rotation });
+    });
+
+    socket.on("weapon", (weapon: string) => {
+      const p = players.get(socket.id);
+      if (!p) return;
+      p.weapon = weapon;
+      socket.broadcast.emit("playerWeapon", { id: socket.id, weapon });
     });
 
     socket.on("shoot", (data: { targetId: string; damage: number }) => {
@@ -93,7 +97,7 @@ export function createGameServer(app: Express) {
       const target = players.get(data.targetId);
       if (!shooter || !target || !target.alive || !shooter.alive) return;
 
-      const dmg = Math.min(Math.max(data.damage, 0), 50);
+      const dmg = Math.min(Math.max(Number(data.damage) || 0, 0), 100);
       target.health = Math.max(0, target.health - dmg);
 
       io.emit("playerHit", { id: data.targetId, health: target.health });
@@ -113,16 +117,13 @@ export function createGameServer(app: Express) {
         logger.info({ shooter: shooter.nickname, victim: target.nickname }, "Kill");
 
         setTimeout(() => {
-          if (!players.has(data.targetId)) return;
+          const t = players.get(data.targetId);
+          if (!t) return;
           const spawn = getRandomSpawn();
-          target.health = MAX_HEALTH;
-          target.alive = true;
-          target.position = { ...spawn };
-          io.emit("playerRespawned", {
-            id: data.targetId,
-            position: spawn,
-            health: MAX_HEALTH,
-          });
+          t.health = MAX_HEALTH;
+          t.alive = true;
+          t.position = spawn;
+          io.emit("playerRespawned", { id: data.targetId, position: spawn, health: MAX_HEALTH });
         }, RESPAWN_DELAY);
       }
     });

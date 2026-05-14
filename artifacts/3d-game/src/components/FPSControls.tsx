@@ -1,17 +1,13 @@
 import * as THREE from "three";
 import { useRef, useEffect, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import type { PlayerState } from "../types/game";
+import type { PlayerState, WeaponId } from "../types/game";
+import { WEAPONS } from "../types/game";
 
-const SPEED = 8;
-const JUMP_FORCE = 6;
-const GRAVITY = -18;
-const PLAYER_HEIGHT = 1.7;
-const MAX_AMMO = 12;
-const RELOAD_TIME = 1500;
-const FIRE_COOLDOWN = 180;
-const HIT_RANGE = 80;
-const HIT_DAMAGE = 25;
+const SPEED = 9;
+const JUMP_FORCE = 7;
+const GRAVITY = -20;
+const PLAYER_HEIGHT = 1.75;
 
 interface Props {
   self: PlayerState;
@@ -21,7 +17,9 @@ interface Props {
   onAmmoChange: (ammo: number, reloading: boolean) => void;
   onMuzzleFlash: () => void;
   onHitConfirmed: () => void;
+  onWeaponChange: (w: WeaponId) => void;
   alive: boolean;
+  currentWeapon: WeaponId;
 }
 
 const keys: Record<string, boolean> = {};
@@ -34,30 +32,45 @@ export function FPSControls({
   onAmmoChange,
   onMuzzleFlash,
   onHitConfirmed,
+  onWeaponChange,
   alive,
+  currentWeapon,
 }: Props) {
   const { camera, gl } = useThree();
-  const pos = useRef(new THREE.Vector3(self.position.x, self.position.y, self.position.z));
+  const pos = useRef(new THREE.Vector3(self.position.x, PLAYER_HEIGHT, self.position.z));
   const vel = useRef(new THREE.Vector3());
   const yaw = useRef(self.rotation.y);
   const pitch = useRef(0);
   const isGrounded = useRef(true);
-  const lastMove = useRef(0);
-  const ammoRef = useRef(MAX_AMMO);
+  const lastMoveTime = useRef(0);
+  const ammoRef = useRef(WEAPONS[currentWeapon].ammo);
   const reloadingRef = useRef(false);
   const lastShotRef = useRef(0);
-  const locked = useRef(false);
+  const lockedRef = useRef(false);
+  const weaponRef = useRef<WeaponId>(currentWeapon);
+
+  useEffect(() => {
+    weaponRef.current = currentWeapon;
+    ammoRef.current = WEAPONS[currentWeapon].ammo;
+    reloadingRef.current = false;
+    onAmmoChange(WEAPONS[currentWeapon].ammo, false);
+  }, [currentWeapon]);
 
   useEffect(() => {
     pos.current.set(self.position.x, PLAYER_HEIGHT, self.position.z);
+    vel.current.set(0, 0, 0);
   }, [self.position.x, self.position.z]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       keys[e.code] = e.type === "keydown";
-      if (e.code === "KeyR" && e.type === "keydown" && !reloadingRef.current && ammoRef.current < MAX_AMMO) {
+      if (e.type !== "keydown") return;
+      if (e.code === "KeyR" && !reloadingRef.current && ammoRef.current < WEAPONS[weaponRef.current].ammo) {
         startReload();
       }
+      if (e.code === "Digit1") { onWeaponChange("rifle"); }
+      if (e.code === "Digit2") { onWeaponChange("shotgun"); }
+      if (e.code === "Digit3") { onWeaponChange("sniper"); }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -69,10 +82,10 @@ export function FPSControls({
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
-      if (!locked.current) return;
+      if (!lockedRef.current) return;
       yaw.current -= e.movementX * 0.002;
       pitch.current -= e.movementY * 0.002;
-      pitch.current = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch.current));
+      pitch.current = Math.max(-1.3, Math.min(1.3, pitch.current));
     };
     document.addEventListener("mousemove", onMouseMove);
     return () => document.removeEventListener("mousemove", onMouseMove);
@@ -80,13 +93,11 @@ export function FPSControls({
 
   useEffect(() => {
     const onLockChange = () => {
-      locked.current = document.pointerLockElement === gl.domElement;
+      lockedRef.current = document.pointerLockElement === gl.domElement;
     };
     document.addEventListener("pointerlockchange", onLockChange);
     const onClick = () => {
-      if (!locked.current) {
-        gl.domElement.requestPointerLock();
-      }
+      if (!lockedRef.current) gl.domElement.requestPointerLock();
     };
     gl.domElement.addEventListener("click", onClick);
     return () => {
@@ -96,21 +107,22 @@ export function FPSControls({
   }, [gl]);
 
   const startReload = useCallback(() => {
+    const wep = WEAPONS[weaponRef.current];
     reloadingRef.current = true;
     onAmmoChange(0, true);
     setTimeout(() => {
       reloadingRef.current = false;
-      ammoRef.current = MAX_AMMO;
-      onAmmoChange(MAX_AMMO, false);
-    }, RELOAD_TIME);
+      ammoRef.current = WEAPONS[weaponRef.current].ammo;
+      onAmmoChange(WEAPONS[weaponRef.current].ammo, false);
+    }, wep.reloadTime);
   }, [onAmmoChange]);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
-      if (!locked.current || !alive) return;
-      if (e.button !== 0) return;
+      if (!lockedRef.current || !alive || e.button !== 0) return;
+      const wep = WEAPONS[weaponRef.current];
       const now = Date.now();
-      if (now - lastShotRef.current < FIRE_COOLDOWN) return;
+      if (now - lastShotRef.current < wep.fireRate) return;
       if (ammoRef.current <= 0 || reloadingRef.current) {
         if (!reloadingRef.current) startReload();
         return;
@@ -119,35 +131,37 @@ export function FPSControls({
       ammoRef.current--;
       onAmmoChange(ammoRef.current, false);
       onMuzzleFlash();
+      if (ammoRef.current === 0) startReload();
 
-      if (ammoRef.current === 0) {
-        startReload();
-      }
+      for (let p = 0; p < wep.pellets; p++) {
+        const spreadX = (Math.random() - 0.5) * wep.spread * 2;
+        const spreadY = (Math.random() - 0.5) * wep.spread * 2;
+        const dir = new THREE.Vector3(spreadX, spreadY, -1)
+          .applyEuler(new THREE.Euler(pitch.current, yaw.current, 0, "YXZ"))
+          .normalize();
 
-      const dir = new THREE.Vector3(0, 0, -1)
-        .applyEuler(new THREE.Euler(pitch.current, yaw.current, 0, "YXZ"));
-      const raycaster = new THREE.Raycaster(pos.current.clone(), dir, 0.1, HIT_RANGE);
+        let closestId: string | null = null;
+        let closestDist = 120;
 
-      let closestId: string | null = null;
-      let closestDist = HIT_RANGE;
-
-      for (const [id, p] of players) {
-        if (!p.alive) continue;
-        const pPos = new THREE.Vector3(p.position.x, p.position.y + 0.8, p.position.z);
-        const dist = pos.current.distanceTo(pPos);
-        if (dist < closestDist) {
-          const diff = pPos.clone().sub(pos.current);
-          const angle = dir.angleTo(diff.normalize());
-          if (angle < 0.08) {
-            closestDist = dist;
-            closestId = id;
+        for (const [id, pl] of players) {
+          if (!pl.alive) continue;
+          const pPos = new THREE.Vector3(pl.position.x, pl.position.y + 0.8, pl.position.z);
+          const dist = pos.current.distanceTo(pPos);
+          if (dist < closestDist) {
+            const diff = pPos.clone().sub(pos.current).normalize();
+            const angle = dir.angleTo(diff);
+            const hitRadius = 0.1 + (0.3 / Math.max(dist, 1));
+            if (angle < hitRadius) {
+              closestDist = dist;
+              closestId = id;
+            }
           }
         }
-      }
 
-      if (closestId) {
-        onShoot(closestId, HIT_DAMAGE);
-        onHitConfirmed();
+        if (closestId) {
+          onShoot(closestId, wep.damage);
+          onHitConfirmed();
+        }
       }
     };
     window.addEventListener("mousedown", onMouseDown);
@@ -156,54 +170,50 @@ export function FPSControls({
 
   useFrame((_, delta) => {
     if (!alive) return;
+    const dt = Math.min(delta, 0.05);
 
     const euler = new THREE.Euler(pitch.current, yaw.current, 0, "YXZ");
     const q = new THREE.Quaternion().setFromEuler(euler);
     camera.quaternion.copy(q);
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
-    forward.y = 0;
-    forward.normalize();
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
-    right.y = 0;
-    right.normalize();
+    const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, yaw.current, 0));
+    const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, yaw.current, 0));
 
-    const moveDir = new THREE.Vector3();
-    if (keys["KeyW"]) moveDir.addScaledVector(forward, 1);
-    if (keys["KeyS"]) moveDir.addScaledVector(forward, -1);
-    if (keys["KeyA"]) moveDir.addScaledVector(right, -1);
-    if (keys["KeyD"]) moveDir.addScaledVector(right, 1);
-    if (moveDir.lengthSq() > 0) moveDir.normalize();
+    const move = new THREE.Vector3();
+    if (keys["KeyW"]) move.addScaledVector(forward, 1);
+    if (keys["KeyS"]) move.addScaledVector(forward, -1);
+    if (keys["KeyA"]) move.addScaledVector(right, -1);
+    if (keys["KeyD"]) move.addScaledVector(right, 1);
+    if (move.lengthSq() > 0) move.normalize();
 
-    vel.current.x = moveDir.x * SPEED;
-    vel.current.z = moveDir.z * SPEED;
+    const spd = weaponRef.current === "sniper" ? SPEED * 0.8 : SPEED;
+    vel.current.x = move.x * spd;
+    vel.current.z = move.z * spd;
 
     if (keys["Space"] && isGrounded.current) {
       vel.current.y = JUMP_FORCE;
       isGrounded.current = false;
     }
+    vel.current.y += GRAVITY * dt;
 
-    vel.current.y += GRAVITY * delta;
+    pos.current.x += vel.current.x * dt;
+    pos.current.z += vel.current.z * dt;
+    pos.current.y += vel.current.y * dt;
 
-    pos.current.x += vel.current.x * delta;
-    pos.current.z += vel.current.z * delta;
-    pos.current.y += vel.current.y * delta;
-
-    const minY = PLAYER_HEIGHT;
-    if (pos.current.y < minY) {
-      pos.current.y = minY;
+    if (pos.current.y < PLAYER_HEIGHT) {
+      pos.current.y = PLAYER_HEIGHT;
       vel.current.y = 0;
       isGrounded.current = true;
     }
 
-    pos.current.x = Math.max(-29, Math.min(29, pos.current.x));
-    pos.current.z = Math.max(-29, Math.min(29, pos.current.z));
+    pos.current.x = Math.max(-33, Math.min(33, pos.current.x));
+    pos.current.z = Math.max(-33, Math.min(33, pos.current.z));
 
     camera.position.copy(pos.current);
 
     const now = Date.now();
-    if (now - lastMove.current > 50) {
-      lastMove.current = now;
+    if (now - lastMoveTime.current > 40) {
+      lastMoveTime.current = now;
       onMove(
         { x: pos.current.x, y: pos.current.y - PLAYER_HEIGHT + 0.8, z: pos.current.z },
         { x: pitch.current, y: yaw.current },

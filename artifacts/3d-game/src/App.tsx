@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { StartMenu } from "./components/StartMenu";
 import { Game } from "./components/Game";
+import type { MapId } from "./types/game";
 import "./index.css";
 
 export default function App() {
-  const [nickname, setNickname] = useState<string | null>(null);
+  const [state, setState] = useState<{ nickname: string; mapId: MapId } | null>(null);
 
-  if (!nickname) {
-    return <StartMenu onStart={setNickname} />;
+  if (!state) {
+    return <StartMenu onStart={(nickname, mapId) => setState({ nickname, mapId })} />;
   }
 
-  return <Game nickname={nickname} />;
+  return <Game nickname={state.nickname} mapId={state.mapId} />;
 }
