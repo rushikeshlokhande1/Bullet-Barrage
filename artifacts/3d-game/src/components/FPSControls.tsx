@@ -9,6 +9,7 @@ const SPEED = 9;
 const JUMP_FORCE = 7;
 const GRAVITY = -20;
 const PLAYER_HEIGHT = 1.75;
+const MAP_BOUND = 60;
 
 interface Props {
   self: PlayerState;
@@ -19,6 +20,7 @@ interface Props {
   onMuzzleFlash: () => void;
   onHitConfirmed: () => void;
   onWeaponChange: (w: WeaponId) => void;
+  onImpact: (pos: THREE.Vector3) => void;
   alive: boolean;
   currentWeapon: WeaponId;
   isShooting: boolean;
@@ -29,10 +31,10 @@ const keys: Record<string, boolean> = {};
 
 export function FPSControls({
   self, players, onMove, onShoot, onAmmoChange,
-  onMuzzleFlash, onHitConfirmed, onWeaponChange,
+  onMuzzleFlash, onHitConfirmed, onWeaponChange, onImpact,
   alive, currentWeapon, isShooting, setIsShooting,
 }: Props) {
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
   const pos = useRef(new THREE.Vector3(self.position.x, PLAYER_HEIGHT, self.position.z));
   const vel = useRef(new THREE.Vector3());
   const yaw = useRef(self.rotation.y);
@@ -45,6 +47,15 @@ export function FPSControls({
   const lockedRef = useRef(false);
   const weaponRef = useRef<WeaponId>(currentWeapon);
   const shootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Live refs so event handlers can access R3F state
+  const cameraRef = useRef(camera);
+  const sceneRef = useRef(scene);
+  useEffect(() => { cameraRef.current = camera; }, [camera]);
+  useEffect(() => { sceneRef.current = scene; }, [scene]);
+
+  const onImpactRef = useRef(onImpact);
+  useEffect(() => { onImpactRef.current = onImpact; }, [onImpact]);
 
   useEffect(() => {
     weaponRef.current = currentWeapon;
@@ -115,6 +126,22 @@ export function FPSControls({
     }, WEAPONS[weaponRef.current].reloadTime);
   }, [onAmmoChange]);
 
+  // Raycast into scene to find bullet impact point
+  const getImpactPoint = useCallback((dir: THREE.Vector3): THREE.Vector3 | null => {
+    const rc = new THREE.Raycaster();
+    rc.set(cameraRef.current.position, dir.clone().normalize());
+    rc.far = 180;
+    const hits = rc.intersectObjects(sceneRef.current.children, true);
+    for (const hit of hits) {
+      // Skip player-tagged objects and very close hits (gun model)
+      if (hit.distance < 0.5) continue;
+      if (hit.object.userData.noImpact) continue;
+      return hit.point.clone();
+    }
+    // Fallback: project forward 40 units
+    return cameraRef.current.position.clone().addScaledVector(dir, 40);
+  }, []);
+
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
       if (!lockedRef.current || !alive || e.button !== 0) return;
@@ -162,12 +189,23 @@ export function FPSControls({
         if (closestId) {
           onShoot(closestId, wep.damage);
           onHitConfirmed();
+          // Impact on player
+          const pl = players.get(closestId);
+          if (pl) {
+            onImpactRef.current(
+              new THREE.Vector3(pl.position.x, pl.position.y + 0.75, pl.position.z),
+            );
+          }
+        } else {
+          // Impact on environment — raycast
+          const impactPt = getImpactPoint(dir);
+          if (impactPt) onImpactRef.current(impactPt);
         }
       }
     };
     window.addEventListener("mousedown", onMouseDown);
     return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload, setIsShooting]);
+  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload, setIsShooting, getImpactPoint]);
 
   useFrame((_, delta) => {
     if (!alive) return;
@@ -187,8 +225,8 @@ export function FPSControls({
     if (move.lengthSq() > 0) move.normalize();
 
     const spd = weaponRef.current === "sniper" ? SPEED * 0.8 : SPEED;
-    vel.current.x = move.x * spd;
-    vel.current.z = move.z * spd;
+    vel.current.x = THREE.MathUtils.lerp(vel.current.x, move.x * spd, 0.18);
+    vel.current.z = THREE.MathUtils.lerp(vel.current.z, move.z * spd, 0.18);
 
     if (keys["Space"] && isGrounded.current) {
       vel.current.y = JUMP_FORCE;
@@ -205,8 +243,8 @@ export function FPSControls({
       vel.current.y = 0;
       isGrounded.current = true;
     }
-    pos.current.x = Math.max(-36, Math.min(36, pos.current.x));
-    pos.current.z = Math.max(-36, Math.min(36, pos.current.z));
+    pos.current.x = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.x));
+    pos.current.z = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.z));
 
     camera.position.copy(pos.current);
 

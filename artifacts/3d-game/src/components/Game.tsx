@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import { Arena } from "./Arena";
 import { getMap } from "../data/maps";
 import { RemotePlayer } from "./RemotePlayer";
 import { FPSControls } from "./FPSControls";
 import { HUD } from "./HUD";
+import { BulletEffects } from "./BulletEffect";
+import type { ImpactEvent } from "./BulletEffect";
 import { useSocket } from "../hooks/useSocket";
 import type {
   PlayerState, KillEvent, WeaponId, MapId, GameMode, Difficulty,
@@ -12,6 +15,8 @@ import type {
 import { WEAPONS } from "../types/game";
 
 const MAX_HEALTH = 100;
+const IMPACT_TTL = 420;
+let impactCounter = 0;
 
 interface Props {
   nickname: string;
@@ -36,6 +41,7 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
   const [locked, setLocked] = useState(false);
   const [currentWeapon, setCurrentWeapon] = useState<WeaponId>("rifle");
   const [isShooting, setIsShooting] = useState(false);
+  const [impacts, setImpacts] = useState<ImpactEvent[]>([]);
 
   const selfIdRef = useRef("");
   const map = getMap(mapId);
@@ -133,6 +139,15 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
     setReloading(false);
   }, []);
 
+  const handleImpact = useCallback((position: THREE.Vector3) => {
+    const id = ++impactCounter;
+    const event: ImpactEvent = { id, position, timestamp: Date.now() };
+    setImpacts((prev) => [...prev.slice(-8), event]);
+    setTimeout(() => {
+      setImpacts((prev) => prev.filter((e) => e.id !== id));
+    }, IMPACT_TTL);
+  }, []);
+
   useEffect(() => {
     const fn = () => setLocked(document.pointerLockElement !== null);
     document.addEventListener("pointerlockchange", fn);
@@ -145,7 +160,7 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
   return (
     <div style={{ width: "100vw", height: "100vh", background: map.sky }}>
       <Canvas
-        camera={{ fov: 80, near: 0.05, far: 500, position: [0, 1.75, 0] }}
+        camera={{ fov: 80, near: 0.05, far: 600, position: [0, 1.75, 0] }}
         style={{ width: "100%", height: "100%" }}
         gl={{ antialias: false }}
       >
@@ -162,6 +177,8 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
           <RemotePlayer key={p.id} player={p} />
         ))}
 
+        <BulletEffects impacts={impacts} />
+
         {self && (
           <FPSControls
             self={self}
@@ -172,6 +189,7 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
             onMuzzleFlash={() => {}}
             onHitConfirmed={handleHitConfirmed}
             onWeaponChange={handleWeaponChange}
+            onImpact={handleImpact}
             alive={alive}
             currentWeapon={currentWeapon}
             isShooting={isShooting}

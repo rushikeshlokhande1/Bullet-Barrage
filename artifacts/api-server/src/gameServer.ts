@@ -53,26 +53,31 @@ const BOT_NAMES = [
 const BOT_WEAPONS = ["rifle", "shotgun", "sniper"];
 
 const SPAWN_POINTS = [
-  { x: 0, y: 0.8, z: -20 }, { x: 0, y: 0.8, z: 20 },
-  { x: 20, y: 0.8, z: 0 }, { x: -20, y: 0.8, z: 0 },
-  { x: 14, y: 0.8, z: 14 }, { x: -14, y: 0.8, z: 14 },
-  { x: 14, y: 0.8, z: -14 }, { x: -14, y: 0.8, z: -14 },
+  { x: -45, y: 0.8, z: -45 }, { x: 45, y: 0.8, z: -45 },
+  { x: -45, y: 0.8, z: 45 }, { x: 45, y: 0.8, z: 45 },
+  { x: 0, y: 0.8, z: -45 }, { x: 0, y: 0.8, z: 45 },
+  { x: -45, y: 0.8, z: 0 }, { x: 45, y: 0.8, z: 0 },
+  { x: -20, y: 0.8, z: -20 }, { x: 20, y: 0.8, z: 20 },
+  { x: 20, y: 0.8, z: -20 }, { x: -20, y: 0.8, z: 20 },
 ];
 
 const WAYPOINTS = [
   ...SPAWN_POINTS.map((p) => ({ x: p.x, z: p.z })),
-  { x: 5, z: 5 }, { x: -5, z: 5 }, { x: 5, z: -5 }, { x: -5, z: -5 },
-  { x: 25, z: 5 }, { x: -25, z: -5 }, { x: 0, z: 0 },
+  { x: 0, z: 0 }, { x: 15, z: 0 }, { x: -15, z: 0 },
+  { x: 0, z: 15 }, { x: 0, z: -15 },
+  { x: 30, z: 30 }, { x: -30, z: -30 },
+  { x: 30, z: -30 }, { x: -30, z: 30 },
+  { x: 5, z: 5 }, { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 },
 ];
 
 const MAX_HEALTH = 100;
 const RESPAWN_DELAY = 3000;
-const BOT_SPEED = 6.5;
+const BOT_SPEED = 5.5;
 const BOT_TICK = 100;
 const GRAVITY = -20;
 const PLAYER_HEIGHT = 0.8;
-const SIGHT_RANGE = 22;
-const ATTACK_RANGE = 15;
+const SIGHT_RANGE = 28;
+const ATTACK_RANGE = 18;
 
 function getRandomSpawn() {
   return { ...SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)] };
@@ -140,11 +145,12 @@ class SoloSession {
     const wp = getRandomWaypoint();
     const weaponChoice = BOT_WEAPONS[Math.floor(Math.random() * BOT_WEAPONS.length)];
     const fireRateMap: Record<string, number> = {
-      rifle: 900 - this.difficulty * 150,
-      shotgun: 1400 - this.difficulty * 200,
-      sniper: 2200 - this.difficulty * 300,
+      rifle:   1800 - this.difficulty * 300,   // easy:1800 normal:1500 hard:1200
+      shotgun: 2600 - this.difficulty * 400,   // easy:2600 normal:2200 hard:1800
+      sniper:  3800 - this.difficulty * 600,   // easy:3800 normal:3200 hard:2600
     };
-    const accuracyBase = 0.4 + this.difficulty * 0.15;
+    // easy:0.12  normal:0.22  hard:0.32
+    const accuracyBase = 0.12 + this.difficulty * 0.10;
 
     return {
       id: `bot_${index}_${this.socket.id}`,
@@ -304,7 +310,7 @@ class SoloSession {
           : bot.accuracy - 0.2;
 
         if (hitRoll < hitThreshold) {
-          const dmgMap: Record<string, number> = { rifle: 20, shotgun: 12, sniper: 75 };
+          const dmgMap: Record<string, number> = { rifle: 20, shotgun: 14, sniper: 38 };
           const dmg = dmgMap[bot.weapon] ?? 20;
 
           player.health = Math.max(0, player.health - dmg);
