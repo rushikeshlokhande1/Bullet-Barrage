@@ -7,6 +7,7 @@ import { RemotePlayer } from "./RemotePlayer";
 import { FPSControls } from "./FPSControls";
 import { HUD } from "./HUD";
 import { BulletEffects } from "./BulletEffect";
+import { Scoreboard } from "./Scoreboard";
 import type { ImpactEvent } from "./BulletEffect";
 import { useSocket } from "../hooks/useSocket";
 import type {
@@ -42,6 +43,8 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
   const [currentWeapon, setCurrentWeapon] = useState<WeaponId>("rifle");
   const [isShooting, setIsShooting] = useState(false);
   const [impacts, setImpacts] = useState<ImpactEvent[]>([]);
+  const [selfDeaths, setSelfDeaths] = useState(0);
+  const [showScoreboard, setShowScoreboard] = useState(false);
 
   const selfIdRef = useRef("");
   const map = getMap(mapId);
@@ -89,15 +92,30 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
   }, []);
 
   const onPlayerDied = useCallback((data: KillEvent) => {
+    // Resolve victim nickname before marking dead
+    let victimNickname = data.victimNickname ?? "";
+    if (!victimNickname) {
+      if (data.id === selfIdRef.current) {
+        victimNickname = "you";
+      } else {
+        victimNickname = playersRef.current.get(data.id)?.nickname ?? "???";
+      }
+    }
+
     if (data.id === selfIdRef.current) {
       setAlive(false);
+      setSelfDeaths((d) => d + 1);
     } else {
       const p = playersRef.current.get(data.id);
-      if (p) { p.alive = false; }
+      if (p) {
+        p.alive = false;
+        p.deaths = (p.deaths ?? 0) + 1;
+      }
       forceUpdate((n) => n + 1);
     }
     if (data.killerId === selfIdRef.current) setKills(data.kills);
-    setKillFeed((prev) => [...prev.slice(-4), { ...data, timestamp: Date.now() }]);
+    const enriched: KillEvent = { ...data, victimNickname, timestamp: Date.now() };
+    setKillFeed((prev) => [...prev.slice(-4), enriched]);
     setTimeout(() => setKillFeed((prev) => prev.slice(1)), 4000);
   }, []);
 
@@ -152,6 +170,21 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
     const fn = () => setLocked(document.pointerLockElement !== null);
     document.addEventListener("pointerlockchange", fn);
     return () => document.removeEventListener("pointerlockchange", fn);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Tab") {
+        e.preventDefault();
+        setShowScoreboard(e.type === "keydown");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
   }, []);
 
   const remotePlayers = Array.from(playersRef.current.values());
@@ -213,6 +246,15 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
           currentWeapon={currentWeapon}
           mapName={map.name}
           playerCount={playerCount}
+        />
+      )}
+
+      {self && showScoreboard && (
+        <Scoreboard
+          self={self}
+          players={remotePlayers}
+          selfKills={kills}
+          selfDeaths={selfDeaths}
         />
       )}
 

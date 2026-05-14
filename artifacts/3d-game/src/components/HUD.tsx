@@ -96,7 +96,7 @@ export function HUD({
           <div key={k.id + k.timestamp} className="kf-item">
             <span className="kf-killer">{k.killerNickname}</span>
             <span className="kf-icon"> 🍳 </span>
-            <span className="kf-victim">a player</span>
+            <span className="kf-victim">{k.victimNickname}</span>
           </div>
         ))}
       </div>

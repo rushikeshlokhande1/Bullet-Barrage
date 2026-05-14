@@ -357,3 +357,129 @@ kbd {
   padding: 1px 6px; border-radius: 3px; font-size: 10px;
   font-family: monospace;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SCOREBOARD
+══════════════════════════════════════════════════════════════ */
+.scoreboard-overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  animation: sb-fade-in 0.08s ease;
+}
+@keyframes sb-fade-in {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
+.scoreboard-panel {
+  background: rgba(8,6,16,0.96);
+  border: 1px solid rgba(255,215,0,0.35);
+  border-radius: 6px;
+  min-width: 580px;
+  max-width: 820px;
+  width: 90vw;
+  padding: 0 0 14px;
+  box-shadow: 0 0 40px rgba(255,215,0,0.12), 0 8px 32px rgba(0,0,0,0.7);
+}
+
+.sb-title {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  font-family: 'Black Han Sans', sans-serif;
+  font-size: 22px; letter-spacing: 8px;
+  color: #ffd700;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid rgba(255,215,0,0.2);
+}
+.sb-title-egg { font-size: 20px; }
+
+.sb-table {
+  width: 100%; border-collapse: collapse;
+  font-family: Arial, sans-serif;
+}
+
+.sb-head th {
+  padding: 8px 12px;
+  font-size: 10px; letter-spacing: 2px; color: #666;
+  text-align: left; font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sb-col-rank  { width: 40px; text-align: center !important; }
+.sb-col-name  { min-width: 160px; }
+.sb-col-wep   { min-width: 110px; }
+.sb-col-stat  { width: 70px; text-align: right !important; }
+.sb-col-status{ width: 80px; text-align: center !important; }
+
+.sb-row td {
+  padding: 9px 12px;
+  font-size: 13px; color: #bbb;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s;
+}
+.sb-row:hover td { background: rgba(255,255,255,0.03); }
+
+/* Self row highlight */
+.sb-self td {
+  background: rgba(255,215,0,0.07);
+  color: #e8e8e8;
+}
+.sb-self:hover td { background: rgba(255,215,0,0.11); }
+
+/* Dead row */
+.sb-dead td { opacity: 0.45; }
+
+/* Rank col */
+.sb-col-rank {
+  font-size: 14px; text-align: center;
+  color: #555;
+}
+
+/* Name col */
+.sb-col-name {
+  display: flex; align-items: center; gap: 8px;
+}
+.sb-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.sb-nick { font-weight: 600; color: #ddd; }
+.sb-bot-badge {
+  font-size: 9px; letter-spacing: 1px; color: #888;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 1px 5px; border-radius: 3px;
+}
+.sb-you-badge {
+  font-size: 9px; letter-spacing: 1px; color: #ffd700;
+  background: rgba(255,215,0,0.12);
+  border: 1px solid rgba(255,215,0,0.3);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* Weapon col */
+.sb-wep-icon { margin-right: 5px; }
+.sb-wep-name { font-size: 11px; color: #666; }
+
+/* Stat cols */
+.sb-kills   { font-weight: 700; }
+.sb-nonzero { color: #ffd700; }
+.sb-deaths  { color: #888; }
+.sb-kd-pos  { color: #4caf50; font-weight: 600; }
+.sb-kd-neg  { color: #ef5350; }
+
+/* Status col */
+.sb-col-status { font-size: 10px; letter-spacing: 1px; }
+.sb-status-dot {
+  display: inline-block;
+  width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 5px; vertical-align: middle;
+}
+.sb-alive   { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+.sb-respawn { background: #ef5350; }
+
+.sb-hint {
+  text-align: center; margin-top: 12px;
+  font-size: 10px; letter-spacing: 2px; color: #333;
+  font-family: Arial, sans-serif;
+}

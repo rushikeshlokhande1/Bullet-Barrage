@@ -19,6 +19,7 @@ export interface KillEvent {
   id: string;
   killerId: string;
   killerNickname: string;
+  victimNickname: string;
   kills: number;
   timestamp: number;
 }
