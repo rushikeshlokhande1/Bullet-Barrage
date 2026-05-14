@@ -1,0 +1,113 @@
+Build a browser multiplayer FPS game heavily inspired by Shell Shockers.
+
+IMPORTANT:
+- Keep the project SMALL and LOW TOKEN COST.
+- Prioritize gameplay over graphics.
+- Use minimal code and minimal files.
+- Avoid overengineering.
+- Do not generate unnecessary explanations.
+- Only create code needed for a working game.
+
+Tech Stack:
+- Frontend: HTML + CSS + JavaScript
+- Backend: Node.js + Express + Socket.IO
+- 3D Engine: Three.js
+- No database
+- No login system
+- No React
+- No TypeScript
+
+Main Goal:
+Create a lightweight browser FPS similar to Shell Shockers with:
+- Multiplayer
+- Shooting
+- Health
+- Respawn
+- Small arena map
+- Low-poly graphics
+
+Gameplay Features:
+1. FPS camera controls
+2. WASD movement
+3. Mouse aim
+4. Left click shooting
+5. Jump system
+6. Health system
+7. Respawn after death
+8. Kill counter
+9. Nickname input
+10. Multiplayer synchronization
+
+Weapons:
+- Only ONE gun
+- Hitscan shooting
+- Simple muzzle flash
+- Instant damage
+- Reload mechanic optional
+
+Map:
+- One small block-style map
+- Cubes and walls only
+- No advanced textures
+- No terrain system
+
+Graphics Style:
+- Very low poly
+- Flat colors
+- No shadows
+- No reflections
+- No particle systems
+- No advanced lighting
+
+Networking:
+- Use Socket.IO
+- Sync:
+  - position
+  - rotation
+  - shooting
+  - health
+- Keep packets minimal
+
+Optimization:
+- Target smooth gameplay on low-end laptops
+- Reduce draw calls
+- Keep geometry simple
+- No physics engine
+- Use basic collision detection
+
+UI:
+- Crosshair
+- Health bar
+- Kill count
+- Respawn text
+- Start menu with nickname field
+
+Project Structure:
+- server.js
+- package.json
+- public/index.html
+- public/style.css
+- public/game.js
+
+Development Order:
+1. Setup Express server
+2. Setup Socket.IO
+3. Create 3D scene
+4. Add FPS controls
+5. Add multiplayer players
+6. Add shooting
+7. Add health and respawn
+8. Add UI
+9. Final optimization
+
+Code Rules:
+- Keep code beginner friendly
+- Keep responses SHORT
+- Generate COMPLETE files
+- Do NOT rewrite entire project unless necessary
+- Modify only affected files
+- Avoid unnecessary libraries
+- Avoid complicated architecture
+
+Target:
+A playable lightweight multiplayer FPS browser game inspired by Shell Shockers that runs smoothly on Replit.
