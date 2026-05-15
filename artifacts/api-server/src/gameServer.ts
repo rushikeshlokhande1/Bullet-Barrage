@@ -34,6 +34,10 @@ interface Bot extends Player {
   respawnTimer: number;
   fireRate: number;
   accuracy: number;
+  /** True when bot is advancing toward player to get line-of-sight ("peeking") */
+  isPeeking: boolean;
+  /** Remaining time in current peek or cover phase */
+  peekTimer: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -75,8 +79,76 @@ const BOT_SPEED = 5.5;
 const BOT_TICK = 100;
 const GRAVITY = -20;
 const PLAYER_HEIGHT = 0.8;
-const SIGHT_RANGE = 28;
-const ATTACK_RANGE = 18;
+const SIGHT_RANGE = 32;
+const ATTACK_RANGE = 22;
+
+// ─── 2D Line-of-Sight ─────────────────────────────────────────────────────────
+//
+// Collidable cover rectangles [x0, x1, z0, z1] shared across all maps.
+// These approximate the central building walls and lane containers.
+
+const COVER_RECTS_2D: Array<[number, number, number, number]> = [
+  // Central building walls (N/S solid walls)
+  [-7,  7, -6.75, -5.25],
+  [-7,  7,  5.25,  6.75],
+  // Central building side walls
+  [-7.25, -5.75, -6,  1],
+  [-7.25, -5.75, -1,  6],
+  [ 5.75,  7.25, -6,  1],
+  [ 5.75,  7.25, -1,  6],
+  // Left lane — tall vertical container
+  [-19, -17, -7, 7],
+  // Left lane — N/S horizontal containers
+  [-20, -10, -23, -21],
+  [-20, -10,  21,  23],
+  // Right lane — tall vertical container
+  [ 17,  19, -7,  7],
+  // Right lane — N/S horizontal containers
+  [ 10,  20,  21,  23],
+  [ 10,  20, -23, -21],
+  // Corner spawn L-walls (approximate)
+  [-25, -19, -23.5, -22],  [-21.5, -19.5, -25, -19],
+  [ 19,  25, -23.5, -22],  [ 19.5,  21.5, -25, -19],
+  [-25, -19,  22, 23.5],   [-21.5, -19.5,  19,  25],
+  [ 19,  25,  22, 23.5],   [ 19.5,  21.5,  19,  25],
+];
+
+/**
+ * 2D parametric ray–AABB intersection test.
+ * Returns false (blocked) if the segment from (ax,az)→(bx,bz) passes through any cover rect.
+ */
+function hasLineOfSight2D(ax: number, az: number, bx: number, bz: number): boolean {
+  const dx = bx - ax;
+  const dz = bz - az;
+  for (const [rx0, rx1, rz0, rz1] of COVER_RECTS_2D) {
+    let tMin = 0, tMax = 1;
+
+    if (Math.abs(dx) < 1e-8) {
+      if (ax < rx0 || ax > rx1) continue;
+    } else {
+      const t1 = (rx0 - ax) / dx;
+      const t2 = (rx1 - ax) / dx;
+      tMin = Math.max(tMin, Math.min(t1, t2));
+      tMax = Math.min(tMax, Math.max(t1, t2));
+      if (tMin > tMax) continue;
+    }
+
+    if (Math.abs(dz) < 1e-8) {
+      if (az < rz0 || az > rz1) continue;
+    } else {
+      const t1 = (rz0 - az) / dz;
+      const t2 = (rz1 - az) / dz;
+      tMin = Math.max(tMin, Math.min(t1, t2));
+      tMax = Math.min(tMax, Math.max(t1, t2));
+      if (tMin > tMax) continue;
+    }
+
+    if (tMax >= 0 && tMin <= 1) return false; // blocked
+  }
+  return true;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getRandomSpawn() {
   return { ...SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)] };
@@ -84,10 +156,6 @@ function getRandomSpawn() {
 
 function getRandomWaypoint() {
   return { ...WAYPOINTS[Math.floor(Math.random() * WAYPOINTS.length)] };
-}
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
 }
 
 function angleDiff(a: number, b: number) {
@@ -144,11 +212,10 @@ class SoloSession {
     const wp = getRandomWaypoint();
     const weaponChoice = BOT_WEAPONS[Math.floor(Math.random() * BOT_WEAPONS.length)];
     const fireRateMap: Record<string, number> = {
-      rifle:   1800 - this.difficulty * 300,   // easy:1800 normal:1500 hard:1200
-      shotgun: 2600 - this.difficulty * 400,   // easy:2600 normal:2200 hard:1800
-      sniper:  3800 - this.difficulty * 600,   // easy:3800 normal:3200 hard:2600
+      rifle:   1800 - this.difficulty * 300,
+      shotgun: 2600 - this.difficulty * 400,
+      sniper:  3800 - this.difficulty * 600,
     };
-    // easy:0.12  normal:0.22  hard:0.32
     const accuracyBase = 0.12 + this.difficulty * 0.10;
 
     return {
@@ -175,6 +242,8 @@ class SoloSession {
       respawnTimer: 0,
       fireRate: fireRateMap[weaponChoice] ?? 1000,
       accuracy: accuracyBase,
+      isPeeking: false,
+      peekTimer: 1.0 + Math.random() * 1.0,
     };
   }
 
@@ -198,6 +267,8 @@ class SoloSession {
         bot.state = "patrol";
         bot.position = { x: sp.x, y: sp.y, z: sp.z };
         bot.velY = 0;
+        bot.isPeeking = false;
+        bot.peekTimer = 1.0 + Math.random() * 1.0;
         this.socket.emit("playerRespawned", { id: bot.id, position: bot.position, health: MAX_HEALTH });
       }
       return;
@@ -214,27 +285,21 @@ class SoloSession {
         bot.idleTimer -= dt;
         if (bot.idleTimer <= 0) bot.state = "patrol";
         break;
-
       case "patrol":
-        if (player.alive && distToPlayer < SIGHT_RANGE) {
+        if (player.alive && distToPlayer < SIGHT_RANGE)
           bot.state = distToPlayer < ATTACK_RANGE ? "attack" : "chase";
-        }
         break;
-
       case "chase":
-        if (!player.alive || distToPlayer > SIGHT_RANGE + 5) {
+        if (!player.alive || distToPlayer > SIGHT_RANGE + 5)
           bot.state = "patrol";
-        } else if (distToPlayer < ATTACK_RANGE) {
+        else if (distToPlayer < ATTACK_RANGE)
           bot.state = "attack";
-        }
         break;
-
       case "attack":
-        if (!player.alive || distToPlayer > SIGHT_RANGE + 5) {
+        if (!player.alive || distToPlayer > SIGHT_RANGE + 5)
           bot.state = "patrol";
-        } else if (distToPlayer > ATTACK_RANGE + 3) {
+        else if (distToPlayer > ATTACK_RANGE + 3)
           bot.state = "chase";
-        }
         break;
     }
 
@@ -247,7 +312,7 @@ class SoloSession {
       bot.isGrounded = true;
     }
 
-    // ── Jump timer ─────────────────────────────────────────────────────────
+    // ── Occasional jump ────────────────────────────────────────────────────
     bot.jumpTimer -= dt;
     if (bot.jumpTimer <= 0 && bot.isGrounded) {
       if (bot.state === "attack" || bot.state === "chase") {
@@ -266,7 +331,6 @@ class SoloSession {
       const wdx = bot.waypointX - bot.position.x;
       const wdz = bot.waypointZ - bot.position.z;
       const wDist = Math.sqrt(wdx * wdx + wdz * wdz);
-
       if (wDist < 1.5) {
         const wp = getRandomWaypoint();
         bot.waypointX = wp.x;
@@ -285,28 +349,53 @@ class SoloSession {
     } else if (bot.state === "attack") {
       targetYaw = Math.atan2(-dx, -dz);
 
-      // Strafe
-      bot.strafTimer -= dt;
-      if (bot.strafTimer <= 0) {
-        bot.strafDir = Math.random() > 0.5 ? 1 : -1;
-        bot.strafTimer = 0.7 + Math.random() * 1.0;
+      const los = hasLineOfSight2D(
+        bot.position.x, bot.position.z,
+        player.position.x, player.position.z,
+      );
+
+      // ── Peek / cover cycle ──────────────────────────────────────────────
+      // When no line-of-sight, bot advances ("peeks") toward the player.
+      // Once LOS is acquired or peek timer expires, bot strafes/waits.
+      bot.peekTimer -= dt;
+
+      if (!los && !bot.isPeeking) {
+        // Step toward player to get LOS (peek out from cover)
+        bot.isPeeking = true;
+        bot.peekTimer = 0.8 + Math.random() * 0.6;
+      } else if (bot.isPeeking && (los || bot.peekTimer <= 0)) {
+        // Got LOS or peek expired → go back to strafe phase
+        bot.isPeeking = false;
+        bot.peekTimer = 1.0 + Math.random() * 1.2;
       }
-      const perpX = Math.cos(targetYaw) * bot.strafDir;
-      const perpZ = -Math.sin(targetYaw) * bot.strafDir;
 
-      // Back off if too close
-      const closeFactor = distToPlayer < 5 ? -0.6 : 0;
-      moveX = perpX * 0.8 + (dx / (distToPlayer || 1)) * closeFactor;
-      moveZ = perpZ * 0.8 + (dz / (distToPlayer || 1)) * closeFactor;
+      if (bot.isPeeking) {
+        // Advance toward player (peekout move — ~60% speed)
+        moveX = dx / distToPlayer;
+        moveZ = dz / distToPlayer;
+      } else {
+        // Normal strafe
+        bot.strafTimer -= dt;
+        if (bot.strafTimer <= 0) {
+          bot.strafDir = Math.random() > 0.5 ? 1 : -1;
+          bot.strafTimer = 0.6 + Math.random() * 0.9;
+        }
+        const perpX =  Math.cos(targetYaw) * bot.strafDir;
+        const perpZ = -Math.sin(targetYaw) * bot.strafDir;
+        const closeFactor = distToPlayer < 5 ? -0.5 : 0.0;
+        moveX = perpX * 0.8 + (dx / (distToPlayer || 1)) * closeFactor;
+        moveZ = perpZ * 0.8 + (dz / (distToPlayer || 1)) * closeFactor;
+      }
 
-      // ── Shoot ────────────────────────────────────────────────────────────
-      if (now - bot.lastShot > bot.fireRate && player.alive) {
+      // ── Shoot (only when line-of-sight is clear) ────────────────────────
+      const canShoot = los || distToPlayer < 3.5; // also shoot at point-blank
+      if (canShoot && now - bot.lastShot > bot.fireRate && player.alive) {
         bot.lastShot = now;
         const hitRoll = Math.random();
         const hitThreshold =
-          distToPlayer < 6 ? bot.accuracy + 0.25
-          : distToPlayer < 12 ? bot.accuracy
-          : bot.accuracy - 0.2;
+          distToPlayer < 6  ? bot.accuracy + 0.25
+          : distToPlayer < 14 ? bot.accuracy
+          : bot.accuracy - 0.15;
 
         if (hitRoll < hitThreshold) {
           const dmgMap: Record<string, number> = { rifle: 20, shotgun: 14, sniper: 38 };
@@ -327,7 +416,6 @@ class SoloSession {
               kills: bot.kills,
             });
 
-            // Auto-respawn player
             setTimeout(() => {
               if (!this.bots.has(bot.id)) return;
               const sp = getRandomSpawn();
@@ -341,16 +429,17 @@ class SoloSession {
       }
     }
 
-    // Smooth rotate
+    // ── Smooth rotation ────────────────────────────────────────────────────
     const yawDiff = angleDiff(bot.rotation.y, targetYaw);
     bot.rotation.y += yawDiff * Math.min(dt * 10, 1);
 
-    // Apply movement
-    const speed = bot.state === "attack" ? BOT_SPEED * 0.75 : BOT_SPEED;
+    // ── Apply movement ─────────────────────────────────────────────────────
+    const speed = bot.state === "attack"
+      ? (bot.isPeeking ? BOT_SPEED * 0.6 : BOT_SPEED * 0.75)
+      : BOT_SPEED;
     bot.position.x = Math.max(-33, Math.min(33, bot.position.x + moveX * speed * dt));
     bot.position.z = Math.max(-33, Math.min(33, bot.position.z + moveZ * speed * dt));
 
-    // Emit movement
     this.socket.emit("playerMoved", {
       id: bot.id,
       position: bot.position,
@@ -450,10 +539,7 @@ export function createGameServer(app: Express) {
 
     socket.on("move", (data: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number } }) => {
       const session = soloSessions.get(socket.id);
-      if (session) {
-        session.handleMove(data.position, data.rotation);
-        return;
-      }
+      if (session) { session.handleMove(data.position, data.rotation); return; }
       const p = players.get(socket.id);
       if (!p || !p.alive) return;
       p.position = data.position;
@@ -470,10 +556,7 @@ export function createGameServer(app: Express) {
 
     socket.on("shoot", (data: { targetId: string; damage: number }) => {
       const session = soloSessions.get(socket.id);
-      if (session) {
-        session.handleShoot(data.targetId, data.damage);
-        return;
-      }
+      if (session) { session.handleShoot(data.targetId, data.damage); return; }
 
       const shooter = players.get(socket.id);
       const target = players.get(data.targetId);
@@ -508,10 +591,7 @@ export function createGameServer(app: Express) {
 
     socket.on("disconnect", () => {
       const session = soloSessions.get(socket.id);
-      if (session) {
-        session.cleanup();
-        soloSessions.delete(socket.id);
-      }
+      if (session) { session.cleanup(); soloSessions.delete(socket.id); }
       players.delete(socket.id);
       io.emit("playerLeft", socket.id);
       logger.info({ id: socket.id }, "Player disconnected");

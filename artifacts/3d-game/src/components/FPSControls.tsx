@@ -12,6 +12,8 @@ const GRAVITY = -20;
 const PLAYER_HEIGHT = 1.75;
 const PLAYER_RADIUS = 0.38;
 const MAP_BOUND = 29;
+/** How far in front of the camera the muzzle sits — bullets spawn here, not inside walls. */
+const MUZZLE_OFFSET = 0.45;
 
 interface Props {
   self: PlayerState;
@@ -30,7 +32,6 @@ interface Props {
   boxes: MapBox[];
 }
 
-/** Precomputed AABB extents for collision */
 interface AABB {
   x0: number; x1: number;
   y0: number; y1: number;
@@ -38,6 +39,8 @@ interface AABB {
 }
 
 const keys: Record<string, boolean> = {};
+const _tmpDir = new THREE.Vector3();
+const _rc = new THREE.Raycaster();
 
 export function FPSControls({
   self, players, onMove, onShoot, onAmmoChange,
@@ -66,7 +69,7 @@ export function FPSControls({
   const onImpactRef = useRef(onImpact);
   useEffect(() => { onImpactRef.current = onImpact; }, [onImpact]);
 
-  // Precompute AABB for every solid box (skip noCollide entries)
+  // Precompute AABB extents for solid boxes (skips noCollide entries)
   const collidables = useMemo<AABB[]>(() =>
     boxes
       .filter((b) => !b.noCollide)
@@ -150,17 +153,47 @@ export function FPSControls({
     }, WEAPONS[weaponRef.current].reloadTime);
   }, [onAmmoChange]);
 
-  const getImpactPoint = useCallback((dir: THREE.Vector3): THREE.Vector3 | null => {
-    const rc = new THREE.Raycaster();
-    rc.set(cameraRef.current.position, dir.clone().normalize());
-    rc.far = 180;
-    const hits = rc.intersectObjects(sceneRef.current.children, true);
+  /**
+   * Raycast from just past the muzzle toward a target to check if a solid
+   * map box (userData.mapBox === true) blocks the line of sight.
+   * Player meshes (userData.isPlayer) are transparently ignored.
+   */
+  const hasLineOfSight = useCallback((
+    shooterPos: THREE.Vector3,
+    targetPos: THREE.Vector3,
+  ): boolean => {
+    const dist = shooterPos.distanceTo(targetPos);
+    if (dist < 1.5) return true; // point-blank — always registers
+    _tmpDir.subVectors(targetPos, shooterPos).normalize();
+    // Start MUZZLE_OFFSET past the shooter so we never hit the wall we're pressed against
+    const origin = shooterPos.clone().addScaledVector(_tmpDir, MUZZLE_OFFSET);
+    _rc.set(origin, _tmpDir);
+    _rc.far = Math.max(0.1, dist - 0.4); // stop just before the target hitbox
+    const hits = _rc.intersectObjects(sceneRef.current.children, true);
     for (const hit of hits) {
-      if (hit.distance < 0.5) continue;
+      // A solid map wall is in the way — shot blocked
+      if (hit.object.userData.mapBox) return false;
+    }
+    return true;
+  }, []);
+
+  /**
+   * Raycast into the scene from the muzzle to find where a bullet lands.
+   * Starts MUZZLE_OFFSET ahead so it can never immediately re-hit the surface
+   * the player is pressed against.
+   */
+  const getImpactPoint = useCallback((dir: THREE.Vector3): THREE.Vector3 => {
+    const normDir = dir.clone().normalize();
+    const origin = cameraRef.current.position.clone().addScaledVector(normDir, MUZZLE_OFFSET);
+    _rc.set(origin, normDir);
+    _rc.far = 180;
+    const hits = _rc.intersectObjects(sceneRef.current.children, true);
+    for (const hit of hits) {
       if (hit.object.userData.noImpact) continue;
+      if (hit.object.userData.isPlayer) continue; // don't use player mesh as impact surface
       return hit.point.clone();
     }
-    return cameraRef.current.position.clone().addScaledVector(dir, 40);
+    return origin.addScaledVector(normDir, 40);
   }, []);
 
   useEffect(() => {
@@ -189,42 +222,50 @@ export function FPSControls({
           .applyEuler(new THREE.Euler(pitch.current, yaw.current, 0, "YXZ"))
           .normalize();
 
+        // Muzzle world position — start of the bullet trace
+        const muzzlePos = pos.current.clone().addScaledVector(dir, MUZZLE_OFFSET);
+
+        // ── Player hit detection (angle check + LOS validation) ────────────
         let closestId: string | null = null;
         let closestDist = 120;
+        let closestTargetPos: THREE.Vector3 | null = null;
 
         for (const [id, pl] of players) {
           if (!pl.alive) continue;
-          const pPos = new THREE.Vector3(pl.position.x, pl.position.y + 0.75, pl.position.z);
-          const dist = pos.current.distanceTo(pPos);
-          if (dist < closestDist) {
-            const diff = pPos.clone().sub(pos.current).normalize();
-            const angle = dir.angleTo(diff);
-            const hitRadius = 0.12 + (0.25 / Math.max(dist, 1));
-            if (angle < hitRadius) {
-              closestDist = dist;
-              closestId = id;
-            }
+          const tPos = new THREE.Vector3(pl.position.x, pl.position.y + 0.75, pl.position.z);
+          const dist = muzzlePos.distanceTo(tPos);
+          if (dist >= closestDist) continue;
+
+          const diff = tPos.clone().sub(muzzlePos).normalize();
+          const angle = dir.angleTo(diff);
+          const hitRadius = 0.12 + (0.28 / Math.max(dist, 1));
+          if (angle < hitRadius) {
+            closestDist = dist;
+            closestId = id;
+            closestTargetPos = tPos;
           }
         }
 
-        if (closestId) {
-          onShoot(closestId, wep.damage);
-          onHitConfirmed();
-          const pl = players.get(closestId);
-          if (pl) {
-            onImpactRef.current(
-              new THREE.Vector3(pl.position.x, pl.position.y + 0.75, pl.position.z),
-            );
+        if (closestId && closestTargetPos) {
+          // LOS check — don't register hit if a solid wall is between muzzle and target
+          if (hasLineOfSight(muzzlePos, closestTargetPos)) {
+            onShoot(closestId, wep.damage);
+            onHitConfirmed();
+            onImpactRef.current(closestTargetPos);
+          } else {
+            // Shot stopped by cover — show impact on the wall
+            onImpactRef.current(getImpactPoint(dir));
           }
         } else {
-          const impactPt = getImpactPoint(dir);
-          if (impactPt) onImpactRef.current(impactPt);
+          // No player in sights — impact on environment
+          onImpactRef.current(getImpactPoint(dir));
         }
       }
     };
     window.addEventListener("mousedown", onMouseDown);
     return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload, setIsShooting, getImpactPoint]);
+  }, [alive, players, onShoot, onMuzzleFlash, onHitConfirmed, onAmmoChange, startReload,
+      setIsShooting, getImpactPoint, hasLineOfSight]);
 
   useFrame((_, delta) => {
     if (!alive) return;
@@ -253,17 +294,14 @@ export function FPSControls({
     }
     vel.current.y += GRAVITY * dt;
 
-    // ── Axis-separated movement + AABB box collision ──────────────────────
+    // ── Axis-separated movement + AABB solid box collision ───────────────
 
-    // ── X axis ──
+    // X axis
     pos.current.x += vel.current.x * dt;
     for (const b of collidables) {
-      const px0 = pos.current.x - PLAYER_RADIUS;
-      const px1 = pos.current.x + PLAYER_RADIUS;
-      const py0 = pos.current.y - PLAYER_HEIGHT;
-      const py1 = pos.current.y;
-      const pz0 = pos.current.z - PLAYER_RADIUS;
-      const pz1 = pos.current.z + PLAYER_RADIUS;
+      const px0 = pos.current.x - PLAYER_RADIUS, px1 = pos.current.x + PLAYER_RADIUS;
+      const py0 = pos.current.y - PLAYER_HEIGHT, py1 = pos.current.y;
+      const pz0 = pos.current.z - PLAYER_RADIUS, pz1 = pos.current.z + PLAYER_RADIUS;
       if (px1 > b.x0 && px0 < b.x1 && py1 > b.y0 && py0 < b.y1 && pz1 > b.z0 && pz0 < b.z1) {
         pos.current.x = vel.current.x > 0 ? b.x0 - PLAYER_RADIUS : b.x1 + PLAYER_RADIUS;
         vel.current.x = 0;
@@ -271,15 +309,12 @@ export function FPSControls({
     }
     pos.current.x = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.x));
 
-    // ── Z axis ──
+    // Z axis
     pos.current.z += vel.current.z * dt;
     for (const b of collidables) {
-      const px0 = pos.current.x - PLAYER_RADIUS;
-      const px1 = pos.current.x + PLAYER_RADIUS;
-      const py0 = pos.current.y - PLAYER_HEIGHT;
-      const py1 = pos.current.y;
-      const pz0 = pos.current.z - PLAYER_RADIUS;
-      const pz1 = pos.current.z + PLAYER_RADIUS;
+      const px0 = pos.current.x - PLAYER_RADIUS, px1 = pos.current.x + PLAYER_RADIUS;
+      const py0 = pos.current.y - PLAYER_HEIGHT, py1 = pos.current.y;
+      const pz0 = pos.current.z - PLAYER_RADIUS, pz1 = pos.current.z + PLAYER_RADIUS;
       if (px1 > b.x0 && px0 < b.x1 && py1 > b.y0 && py0 < b.y1 && pz1 > b.z0 && pz0 < b.z1) {
         pos.current.z = vel.current.z > 0 ? b.z0 - PLAYER_RADIUS : b.z1 + PLAYER_RADIUS;
         vel.current.z = 0;
@@ -287,35 +322,28 @@ export function FPSControls({
     }
     pos.current.z = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.z));
 
-    // ── Y axis (gravity, floor, box tops) ──
+    // Y axis (gravity, floor, box tops / undersides)
     pos.current.y += vel.current.y * dt;
 
-    // Ground plane
     if (pos.current.y < PLAYER_HEIGHT) {
       pos.current.y = PLAYER_HEIGHT;
       vel.current.y = 0;
       isGrounded.current = true;
     }
 
-    // Land on top of boxes / hit underside of boxes
     for (const b of collidables) {
-      const px0 = pos.current.x - PLAYER_RADIUS;
-      const px1 = pos.current.x + PLAYER_RADIUS;
-      const pz0 = pos.current.z - PLAYER_RADIUS;
-      const pz1 = pos.current.z + PLAYER_RADIUS;
+      const px0 = pos.current.x - PLAYER_RADIUS, px1 = pos.current.x + PLAYER_RADIUS;
+      const pz0 = pos.current.z - PLAYER_RADIUS, pz1 = pos.current.z + PLAYER_RADIUS;
       if (px1 <= b.x0 || px0 >= b.x1 || pz1 <= b.z0 || pz0 >= b.z1) continue;
 
       const feet = pos.current.y - PLAYER_HEIGHT;
       const head = pos.current.y;
 
-      // Landing on top of a box
       if (vel.current.y <= 0 && feet < b.y1 && feet >= b.y0 - 0.05) {
         pos.current.y = b.y1 + PLAYER_HEIGHT;
         vel.current.y = 0;
         isGrounded.current = true;
-      }
-      // Hitting the underside of a box
-      else if (vel.current.y > 0 && head > b.y0 && head <= b.y1 + 0.05) {
+      } else if (vel.current.y > 0 && head > b.y0 && head <= b.y1 + 0.05) {
         pos.current.y = b.y0;
         vel.current.y = 0;
       }

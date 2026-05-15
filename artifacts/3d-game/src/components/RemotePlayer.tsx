@@ -32,40 +32,39 @@ export function RemotePlayer({ player }: Props) {
   const healthPct = player.health / 100;
   const barColor = healthPct > 0.6 ? "#4caf50" : healthPct > 0.3 ? "#ff9800" : "#f44336";
 
+  // userData.isPlayer = true marks these meshes so LOS raycasts skip them
   return (
     <group ref={groupRef} position={[player.position.x, player.position.y, player.position.z]}>
-      {/* Egg body (main oval) */}
-      <mesh position={[0, 0.75, 0]} scale={[1, 1.35, 1]}>
+      {/* Egg body */}
+      <mesh position={[0, 0.75, 0]} scale={[1, 1.35, 1]} userData={{ isPlayer: true }}>
         <sphereGeometry args={[0.42, 10, 10]} />
         <meshLambertMaterial color={player.color} />
       </mesh>
 
       {/* Eyes */}
-      <mesh position={[0.17, 1.0, -0.33]} scale={[1, 1.2, 1]}>
+      <mesh position={[0.17, 1.0, -0.33]} scale={[1, 1.2, 1]} userData={{ isPlayer: true }}>
         <sphereGeometry args={[0.09, 7, 7]} />
         <meshLambertMaterial color="#111" />
       </mesh>
-      <mesh position={[-0.17, 1.0, -0.33]} scale={[1, 1.2, 1]}>
+      <mesh position={[-0.17, 1.0, -0.33]} scale={[1, 1.2, 1]} userData={{ isPlayer: true }}>
         <sphereGeometry args={[0.09, 7, 7]} />
         <meshLambertMaterial color="#111" />
       </mesh>
-      {/* Eye shine */}
-      <mesh position={[0.19, 1.03, -0.4]}>
+      <mesh position={[0.19, 1.03, -0.4]} userData={{ isPlayer: true }}>
         <sphereGeometry args={[0.03, 5, 5]} />
         <meshLambertMaterial color="#fff" />
       </mesh>
-      <mesh position={[-0.15, 1.03, -0.4]}>
+      <mesh position={[-0.15, 1.03, -0.4]} userData={{ isPlayer: true }}>
         <sphereGeometry args={[0.03, 5, 5]} />
         <meshLambertMaterial color="#fff" />
       </mesh>
 
       {/* Gun */}
-      <mesh position={[0.5, 0.7, -0.2]} rotation={[0, 0.1, 0]}>
+      <mesh position={[0.5, 0.7, -0.2]} rotation={[0, 0.1, 0]} userData={{ isPlayer: true }}>
         <boxGeometry args={wep.modelScale} />
         <meshLambertMaterial color={wep.color} />
       </mesh>
-      {/* Gun barrel */}
-      <mesh position={[0.5, 0.7, -0.2 - wep.modelScale[2] / 2 - 0.1]} rotation={[0, 0.1, 0]}>
+      <mesh position={[0.5, 0.7, -0.2 - wep.modelScale[2] / 2 - 0.1]} rotation={[0, 0.1, 0]} userData={{ isPlayer: true }}>
         <boxGeometry args={[0.05, 0.05, 0.2]} />
         <meshLambertMaterial color="#333" />
       </mesh>

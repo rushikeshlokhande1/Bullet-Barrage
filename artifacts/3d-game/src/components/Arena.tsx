@@ -11,7 +11,11 @@ export function Arena({ mapId }: Props) {
   const meshes = useMemo(
     () =>
       map.boxes.map((b, i) => (
-        <mesh key={i} position={b.pos}>
+        <mesh
+          key={i}
+          position={b.pos}
+          userData={{ mapBox: !b.noCollide }}
+        >
           <boxGeometry args={b.size} />
           <meshLambertMaterial color={b.color} />
         </mesh>
