@@ -9,7 +9,7 @@ const SPEED = 9;
 const JUMP_FORCE = 7;
 const GRAVITY = -20;
 const PLAYER_HEIGHT = 1.75;
-const MAP_BOUND = 60;
+const MAP_BOUND = 20;
 
 interface Props {
   self: PlayerState;

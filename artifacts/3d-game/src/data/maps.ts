@@ -18,288 +18,209 @@ export interface MapDef {
   spawnPoints: Array<[number, number, number]>;
 }
 
-// Helper: box sitting on the ground at Y=0
-function floor(x: number, z: number, w: number, h: number, d: number, color: string): MapBox {
+// Helpers ─────────────────────────────────────────────────────────────────────
+
+/** Box whose bottom face sits exactly on the ground (y=0). */
+function g(x: number, z: number, w: number, h: number, d: number, color: string): MapBox {
   return { pos: [x, h / 2, z], size: [w, h, d], color };
 }
 
+/** L-shaped spawn cover — two walls meeting at a corner. */
+function spawnCorner(cx: number, cz: number, sx: number, sz: number, color: string): MapBox[] {
+  // sx/sz are ±1 to control which direction the L opens
+  return [
+    { pos: [cx, 2, cz + sz * 1.25], size: [5, 4, 1.5], color },
+    { pos: [cx + sx * 1.75, 2, cz], size: [1.5, 4, 5], color },
+  ];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAP DEFINITIONS
+// ═════════════════════════════════════════════════════════════════════════════
+
 const MAPS: Record<MapId, MapDef> = {
-  // ─────────────────────────────────────────────────────── FARM MAP
+
+  // ── MAP 1: Egg Town ────────────────────────────────────────────────────────
+  // 3-lane arena with a central red building, blue/red shipping containers,
+  // and orange crates. Bright, high-visibility. White floor.
   cracked: {
     id: "cracked",
-    name: "Farm",
-    sky: "#5bbce4",
-    fogColor: "#5bbce4",
-    fogNear: 55,
-    fogFar: 160,
-    floorColor: "#5a9e1e",
+    name: "Egg Town",
+    sky: "#7ec8e3",
+    fogColor: "#7ec8e3",
+    fogNear: 30,
+    fogFar: 80,
+    floorColor: "#f0ece0",
     spawnPoints: [
-      [-45, 1, -45], [45, 1, -45], [-45, 1, 45], [45, 1, 45],
-      [0, 1, -45], [0, 1, 45], [-45, 1, 0], [45, 1, 0],
-      [-20, 1, -20], [20, 1, 20], [20, 1, -20], [-20, 1, 20],
+      [-17, 1, -17], [17, 1, -17], [-17, 1, 17], [17, 1, 17],
+      [0, 1, -19], [0, 1, 19], [-19, 1, 0], [19, 1, 0],
     ],
     boxes: [
-      // ── Floor & paths
-      { pos: [0, -0.5, 0], size: [130, 1, 130], color: "#5a9e1e" },
-      { pos: [0, -0.35, 0], size: [7, 0.4, 130], color: "#b89050" },  // N-S path
-      { pos: [0, -0.35, 0], size: [130, 0.4, 7], color: "#b89050" },  // E-W path
+      // ── Floor
+      { pos: [0, -0.5, 0], size: [42, 1, 42], color: "#f0ece0" },
 
-      // ── Boundary walls
-      { pos: [0, 3.5, 63], size: [130, 8, 2], color: "#5a3010" },
-      { pos: [0, 3.5, -63], size: [130, 8, 2], color: "#5a3010" },
-      { pos: [63, 3.5, 0], size: [2, 8, 130], color: "#5a3010" },
-      { pos: [-63, 3.5, 0], size: [2, 8, 130], color: "#5a3010" },
+      // ── Boundary walls (bright red-orange)
+      { pos: [0, 3.5, 21],  size: [42, 8, 1.5], color: "#cc4422" },
+      { pos: [0, 3.5, -21], size: [42, 8, 1.5], color: "#cc4422" },
+      { pos: [21, 3.5, 0],  size: [1.5, 8, 42], color: "#cc4422" },
+      { pos: [-21, 3.5, 0], size: [1.5, 8, 42], color: "#cc4422" },
 
-      // ── Central barn (hollow rectangle with gaps for entry)
-      floor(0, -9, 22, 5.5, 2, "#8b2500"),             // North wall
-      floor(0, 9, 22, 5.5, 2, "#8b2500"),              // South wall
-      floor(-11, 0, 2, 5.5, 18, "#8b2500"),            // West wall
-      floor(11, 0, 2, 5.5, 18, "#8b2500"),             // East wall
-      { pos: [0, 6, 0], size: [22, 1, 18], color: "#6b1e00" }, // Roof
-      // Barn interior dividers (creates separate rooms)
-      floor(-3, 0, 2, 4, 7, "#7a2500"),
-      floor(3, 0, 2, 4, 7, "#7a2500"),
+      // ── Central building (open E/W, N+S walls + 4 pillars + roof)
+      g(0, -4.5, 10, 5, 1.5, "#dd3311"),     // N wall
+      g(0,  4.5, 10, 5, 1.5, "#dd3311"),     // S wall
+      g(-4.5, -2, 1, 5, 5,   "#dd3311"),     // NW pillar
+      g( 4.5, -2, 1, 5, 5,   "#dd3311"),     // NE pillar
+      g(-4.5,  2, 1, 5, 5,   "#dd3311"),     // SW pillar
+      g( 4.5,  2, 1, 5, 5,   "#dd3311"),     // SE pillar
+      { pos: [0, 5.25, 0], size: [10, 0.5, 9], color: "#bb2200" }, // Roof
 
-      // ── North silos
-      floor(-8, -38, 5, 12, 5, "#c0c8b8"),
-      floor(8, -38, 5, 12, 5, "#c0c8b8"),
-      floor(0, -32, 14, 2.5, 3, "#8b6914"),            // connecting low wall
+      // ── Left lane — blue shipping containers (provide full standing cover)
+      g(-13,  0, 2, 3, 8,   "#2255bb"),      // tall vertical container
+      g(-10, -10, 6, 3, 2,  "#3366cc"),      // horizontal container
+      g(-10,  10, 6, 3, 2,  "#2244aa"),      // horizontal container
 
-      // ── South shed (3 walls + roof)
-      floor(-7, 38, 2, 5, 14, "#6b3010"),
-      floor(7, 38, 2, 5, 14, "#6b3010"),
-      floor(0, 31.5, 14, 5, 2, "#6b3010"),
-      { pos: [0, 5.5, 38], size: [14, 1, 14], color: "#5a2810" },
+      // ── Right lane — red shipping containers (mirrored)
+      g(13,   0, 2, 3, 8,   "#cc2211"),      // tall vertical container
+      g(10,  10, 6, 3, 2,   "#dd3322"),      // horizontal container
+      g(10, -10, 6, 3, 2,   "#bb1100"),      // horizontal container
 
-      // ── East fence line (with gaps to pass through)
-      floor(35, -25, 2, 4, 16, "#7a4820"),
-      floor(35, 2, 2, 4, 18, "#7a4820"),
-      floor(35, 28, 2, 4, 16, "#7a4820"),
+      // ── Mid scatter — orange crates (between lanes)
+      g(-6,  12, 3, 2.5, 3, "#e8902a"),
+      g( 6, -12, 3, 2.5, 3, "#e8902a"),
+      g(-6,  -9, 2.5, 2.5, 2.5, "#cc7820"),
+      g( 6,   9, 2.5, 2.5, 2.5, "#cc7820"),
 
-      // ── West fence line
-      floor(-35, -28, 2, 4, 16, "#7a4820"),
-      floor(-35, -2, 2, 4, 18, "#7a4820"),
-      floor(-35, 25, 2, 4, 16, "#7a4820"),
-
-      // ── NE corner house
-      floor(40, -40, 12, 5, 2, "#c4a875"),             // South wall
-      floor(34, -46, 2, 5, 12, "#c4a875"),             // West wall
-      floor(46, -46, 2, 5, 12, "#c4a875"),             // East wall
-      floor(38, -52, 5, 5, 2, "#c4a875"),              // North wall left (gap in middle)
-      floor(44, -52, 4, 5, 2, "#c4a875"),              // North wall right
-      { pos: [40, 5.5, -46], size: [12, 1, 12], color: "#a08450" }, // Roof
-
-      // ── SW ruins (broken walls)
-      floor(-40, 40, 12, 3.5, 2, "#909090"),
-      floor(-46, 35, 2, 3.5, 9, "#909090"),
-      floor(-34, 46, 7, 2, 2, "#888"),
-      floor(-46, 46, 5, 2, 4, "#999"),
-
-      // ── NW corner - water tower
-      floor(-45, -42, 4, 9, 4, "#7090a0"),             // Tank
-      floor(-43, -42, 1, 9, 1, "#607080"),             // Leg NE
-      floor(-47, -42, 1, 9, 1, "#607080"),             // Leg NW
-      floor(-45, -40, 1, 9, 1, "#607080"),             // Leg S
-      floor(-42, -38, 6, 1.5, 6, "#506070"),           // Platform
-
-      // ── SE corner - crate cluster
-      floor(38, 36, 4, 3, 4, "#8b6914"),
-      floor(44, 38, 3, 2, 3, "#7a5810"),
-      floor(40, 43, 5, 2, 3, "#6b4a10"),
-      floor(36, 42, 3, 3, 5, "#9b7a20"),
-
-      // ── Mid-map cover: hay bales (player can't jump over, provide crouching cover)
-      floor(18, 18, 5, 2.5, 3, "#d4a017"),
-      floor(-18, -18, 5, 2.5, 3, "#d4a017"),
-      floor(18, -18, 3, 2.5, 5, "#c89a14"),
-      floor(-18, 18, 3, 2.5, 5, "#c89a14"),
-
-      // ── Mid-map barrels & crates
-      floor(24, 0, 3, 2.5, 3, "#8b4513"),
-      floor(-24, 0, 3, 2.5, 3, "#8b4513"),
-      floor(0, 24, 3, 2.5, 3, "#7a5510"),
-      floor(0, -24, 3, 2.5, 3, "#7a5510"),
-
-      // ── Low sandbag walls (crouching cover, H=1.5)
-      floor(14, -14, 10, 1.5, 1.5, "#b09050"),
-      floor(-14, 14, 10, 1.5, 1.5, "#b09050"),
-      floor(14, 14, 1.5, 1.5, 10, "#a08040"),
-      floor(-14, -14, 1.5, 1.5, 10, "#a08040"),
-
-      // ── Elevated platform (NE mid area)
-      floor(28, -14, 8, 1.5, 8, "#8b5010"),            // Platform top
-      floor(28, -10, 1.5, 2, 8, "#7a4010"),            // Platform wall east
-      floor(24, -14, 1.5, 2, 8, "#7a4010"),            // Platform wall west
-
-      // ── Scattered individual crates
-      floor(-30, 14, 3, 3, 3, "#7a5010"),
-      floor(30, -14, 3, 3, 3, "#7a5010"),
-      floor(-50, -14, 3, 3, 3, "#8b6014"),
-      floor(50, 14, 3, 3, 3, "#8b6014"),
-      floor(-14, -50, 3, 2.5, 3, "#c4a030"),
-      floor(14, 50, 3, 2.5, 3, "#c4a030"),
+      // ── Corner spawn covers (L-shaped walls)
+      ...spawnCorner(-16, -16,  1,  1, "#aaaaaa"),  // NW
+      ...spawnCorner( 16, -16, -1,  1, "#aaaaaa"),  // NE
+      ...spawnCorner(-16,  16,  1, -1, "#aaaaaa"),  // SW
+      ...spawnCorner( 16,  16, -1, -1, "#aaaaaa"),  // SE
     ],
   },
 
-  // ─────────────────────────────────────────────── SCRAMBLED (DESERT)
+  // ── MAP 2: Container Yard ──────────────────────────────────────────────────
+  // Sandy floor, colorful shipping containers, central open warehouse.
+  // Red vs blue containers form the lane structure. Bright warm palette.
   sandstone: {
     id: "sandstone",
-    name: "Scrambled",
-    sky: "#f5c842",
-    fogColor: "#e8b830",
-    fogNear: 55,
-    fogFar: 160,
-    floorColor: "#d4a843",
+    name: "Container Yard",
+    sky: "#e8d07a",
+    fogColor: "#d4b850",
+    fogNear: 30,
+    fogFar: 75,
+    floorColor: "#e0c878",
     spawnPoints: [
-      [-45, 1, -45], [45, 1, -45], [-45, 1, 45], [45, 1, 45],
-      [0, 1, -45], [0, 1, 45], [-45, 1, 0], [45, 1, 0],
-      [-22, 1, -22], [22, 1, 22], [22, 1, -22], [-22, 1, 22],
+      [-17, 1, -17], [17, 1, -17], [-17, 1, 17], [17, 1, 17],
+      [0, 1, -19], [0, 1, 19], [-19, 1, 0], [19, 1, 0],
     ],
     boxes: [
-      { pos: [0, -0.5, 0], size: [130, 1, 130], color: "#d4a843" },
-      { pos: [0, 3.5, 63], size: [130, 8, 2], color: "#b07830" },
-      { pos: [0, 3.5, -63], size: [130, 8, 2], color: "#b07830" },
-      { pos: [63, 3.5, 0], size: [2, 8, 130], color: "#b07830" },
-      { pos: [-63, 3.5, 0], size: [2, 8, 130], color: "#b07830" },
+      // ── Floor (sandy)
+      { pos: [0, -0.5, 0], size: [42, 1, 42], color: "#e0c878" },
 
-      // Central temple ruin
-      floor(0, 0, 3, 6, 3, "#e8c56a"),                 // Center pillar
-      floor(-8, 0, 3, 8, 3, "#e8c56a"),                // West pillar
-      floor(8, 0, 3, 8, 3, "#e8c56a"),                 // East pillar
-      floor(0, -8, 3, 8, 3, "#e8c56a"),                // North pillar
-      floor(0, 8, 3, 8, 3, "#e8c56a"),                 // South pillar
-      { pos: [0, 7.5, 0], size: [20, 1.5, 20], color: "#d4b055" }, // Partial roof
+      // ── Boundary (wooden fence look)
+      { pos: [0, 2.5, 21],  size: [42, 6, 1.5], color: "#9a6a30" },
+      { pos: [0, 2.5, -21], size: [42, 6, 1.5], color: "#9a6a30" },
+      { pos: [21, 2.5, 0],  size: [1.5, 6, 42], color: "#9a6a30" },
+      { pos: [-21, 2.5, 0], size: [1.5, 6, 42], color: "#9a6a30" },
 
-      // Dunes / sand mounds (broad low cover)
-      floor(-30, 0, 10, 3, 10, "#ddb860"),
-      floor(30, 0, 10, 3, 10, "#ddb860"),
-      floor(0, 30, 10, 3, 10, "#ddb860"),
-      floor(0, -30, 10, 3, 10, "#ddb860"),
+      // ── Central warehouse: open-sided, just roof + 4 pillars
+      { pos: [0, 5, 0], size: [14, 0.5, 10], color: "#882200" },  // Roof
+      g(-6.5, -4.5, 1.2, 9.5, 1.2, "#6b1800"),  // NW pillar
+      g( 6.5, -4.5, 1.2, 9.5, 1.2, "#6b1800"),  // NE pillar
+      g(-6.5,  4.5, 1.2, 9.5, 1.2, "#6b1800"),  // SW pillar
+      g( 6.5,  4.5, 1.2, 9.5, 1.2, "#6b1800"),  // SE pillar
 
-      // Long canyon walls
-      floor(-20, -30, 2, 5, 22, "#c4974a"),
-      floor(20, 30, 2, 5, 22, "#c4974a"),
-      floor(-30, 20, 22, 5, 2, "#c4974a"),
-      floor(30, -20, 22, 5, 2, "#c4974a"),
+      // ── Left lane — red containers
+      g(-13,  0, 2, 3.5, 9, "#cc2211"),          // long side-wall container
+      g(-10, -11, 7, 3.5, 2, "#bb1100"),          // front container
+      g(-10,  11, 7, 3.5, 2, "#dd3322"),          // back container
 
-      // Corner ruins
-      floor(42, -42, 14, 5, 2, "#b08040"),
-      floor(35, -49, 2, 5, 14, "#b08040"),
-      floor(49, -49, 2, 5, 14, "#b08040"),
+      // ── Right lane — blue containers
+      g(13,   0, 2, 3.5, 9, "#2244bb"),           // long side-wall container
+      g(10,  11, 7, 3.5, 2, "#1133aa"),           // back container
+      g(10, -11, 7, 3.5, 2, "#3355cc"),           // front container
 
-      floor(-42, 42, 14, 5, 2, "#b08040"),
-      floor(-35, 49, 2, 5, 14, "#b08040"),
-      floor(-49, 49, 2, 5, 14, "#b08040"),
+      // ── Mid scatter — orange barrels + crates
+      g(-5,  13, 2.5, 2.5, 2.5, "#ff6600"),
+      g( 5, -13, 2.5, 2.5, 2.5, "#ff6600"),
+      g( 0,  13, 4,   2.5, 2,   "#c08830"),       // wide crate row
+      g( 0, -13, 4,   2.5, 2,   "#c08830"),
+      g(-5, -11, 2,   2.5, 2,   "#ee8800"),
+      g( 5,  11, 2,   2.5, 2,   "#ee8800"),
 
-      // Oasis (small water feature)
-      { pos: [-40, 0.2, -40], size: [8, 0.4, 8], color: "#2090c8" },
-      floor(-44, -40, 2, 3, 8, "#5a8030"),             // Oasis reeds
-      floor(-40, -44, 8, 3, 2, "#5a8030"),
-
-      // Rock boulders (scattered, all solid)
-      floor(15, -15, 5, 4, 5, "#a08050"),
-      floor(-15, 15, 5, 4, 5, "#a08050"),
-      floor(45, 15, 4, 4, 4, "#9a7040"),
-      floor(-45, -15, 4, 4, 4, "#9a7040"),
-      floor(20, 45, 4, 3, 4, "#9a7040"),
-      floor(-20, -45, 4, 3, 4, "#9a7040"),
-
-      // Low walls
-      floor(25, -10, 12, 2.5, 2, "#c49050"),
-      floor(-25, 10, 12, 2.5, 2, "#c49050"),
-      floor(-10, -25, 2, 2.5, 12, "#c49050"),
-      floor(10, 25, 2, 2.5, 12, "#c49050"),
-
-      // Elevated sniper tower
-      floor(48, 48, 5, 8, 5, "#b09050"),               // Tower body
-      floor(45, 45, 8, 0.8, 8, "#9a7a40"),             // Platform
+      // ── Corner spawn covers
+      ...spawnCorner(-16, -16,  1,  1, "#b08848"),
+      ...spawnCorner( 16, -16, -1,  1, "#b08848"),
+      ...spawnCorner(-16,  16,  1, -1, "#b08848"),
+      ...spawnCorner( 16,  16, -1, -1, "#b08848"),
     ],
   },
 
-  // ─────────────────────────────────────────────── YOLK-TOPIA (CYBER)
+  // ── MAP 3: Yolk-topia ─────────────────────────────────────────────────────
+  // Dark sci-fi rooftop. Neon cyan/magenta containers, glowing center platform,
+  // neon-edged perimeter. Compact 3-lane layout with vertical feel.
   cyber: {
     id: "cyber",
     name: "Yolk-topia",
-    sky: "#0e0620",
-    fogColor: "#0e0620",
-    fogNear: 45,
-    fogFar: 140,
-    floorColor: "#0a0418",
+    sky: "#0d0820",
+    fogColor: "#0d0820",
+    fogNear: 22,
+    fogFar: 65,
+    floorColor: "#0a0618",
     spawnPoints: [
-      [-45, 1, -45], [45, 1, -45], [-45, 1, 45], [45, 1, 45],
-      [0, 1, -45], [0, 1, 45], [-45, 1, 0], [45, 1, 0],
-      [-22, 1, -22], [22, 1, 22], [22, 1, -22], [-22, 1, 22],
+      [-17, 1, -17], [17, 1, -17], [-17, 1, 17], [17, 1, 17],
+      [0, 1, -19], [0, 1, 19], [-19, 1, 0], [19, 1, 0],
     ],
     boxes: [
-      { pos: [0, -0.5, 0], size: [130, 1, 130], color: "#0a0418" },
-      { pos: [0, -0.35, 0], size: [8, 0.2, 130], color: "#1a0430" },
-      { pos: [0, -0.35, 0], size: [130, 0.2, 8], color: "#1a0430" },
-      { pos: [0, 3.5, 63], size: [130, 8, 2], color: "#150330" },
-      { pos: [0, 3.5, -63], size: [130, 8, 2], color: "#150330" },
-      { pos: [63, 3.5, 0], size: [2, 8, 130], color: "#150330" },
-      { pos: [-63, 3.5, 0], size: [2, 8, 130], color: "#150330" },
+      // ── Floor (dark tile)
+      { pos: [0, -0.5, 0], size: [42, 1, 42], color: "#0a0618" },
+      // Grid lines on floor
+      { pos: [0, -0.38, 0],  size: [42, 0.1, 0.3],  color: "#1a0840" },
+      { pos: [0, -0.38, 0],  size: [0.3, 0.1, 42],  color: "#1a0840" },
+      { pos: [0, -0.38, -7], size: [42, 0.1, 0.15], color: "#120630" },
+      { pos: [0, -0.38,  7], size: [42, 0.1, 0.15], color: "#120630" },
 
-      // Central neon hub
-      floor(0, 0, 6, 8, 6, "#00e5ff"),
-      floor(-12, 0, 2, 6, 16, "#e040fb"),
-      floor(12, 0, 2, 6, 16, "#e040fb"),
-      floor(0, -12, 16, 6, 2, "#00e676"),
-      floor(0, 12, 16, 6, 2, "#00e676"),
-      { pos: [0, 7, 0], size: [16, 1, 16], color: "#001824" },   // Hub roof
+      // ── Boundary walls (dark with neon edge glow)
+      { pos: [0, 3.5,  21], size: [42, 8, 1.5], color: "#1a0840" },
+      { pos: [0, 3.5, -21], size: [42, 8, 1.5], color: "#1a0840" },
+      { pos: [21, 3.5,  0], size: [1.5, 8, 42], color: "#1a0840" },
+      { pos: [-21, 3.5, 0], size: [1.5, 8, 42], color: "#1a0840" },
+      // Top edge neon strips
+      { pos: [0, 7.6,  21], size: [42, 0.3, 1.5], color: "#00e5ff" },
+      { pos: [0, 7.6, -21], size: [42, 0.3, 1.5], color: "#e040fb" },
+      { pos: [21, 7.6,  0], size: [1.5, 0.3, 42], color: "#76ff03" },
+      { pos: [-21, 7.6, 0], size: [1.5, 0.3, 42], color: "#ff4081" },
 
-      // Neon towers (cover + sight lines)
-      floor(-28, -28, 3, 12, 3, "#ff1744"),
-      floor(28, 28, 3, 12, 3, "#ff1744"),
-      floor(28, -28, 3, 12, 3, "#ffea00"),
-      floor(-28, 28, 3, 12, 3, "#ffea00"),
+      // ── Central raised platform (accessible via side-step boxes)
+      g(-5, 0, 3, 1.5, 8, "#0d1428"),             // W approach ramp
+      g( 5, 0, 3, 1.5, 8, "#0d1428"),             // E approach ramp
+      { pos: [0, 2.15, 0], size: [10, 0.3, 6], color: "#0a1428" },  // Platform top
+      { pos: [0, 2.32, -3], size: [10, 0.12, 0.4], color: "#00e5ff" }, // N neon edge
+      { pos: [0, 2.32,  3], size: [10, 0.12, 0.4], color: "#00e5ff" }, // S neon edge
+      // Central object on platform
+      g(0, 0, 2, 4, 2, "#00bcd4"),                 // Center hotspot block
 
-      // Energy barriers (long glowing walls)
-      floor(-22, -10, 2, 5, 18, "#2979ff"),
-      floor(22, 10, 2, 5, 18, "#2979ff"),
-      floor(-10, 22, 18, 5, 2, "#2979ff"),
-      floor(10, -22, 18, 5, 2, "#2979ff"),
+      // ── Left lane — cyan containers
+      g(-13,   0, 2, 3.5, 9, "#00bcd4"),
+      g(-10, -10, 6, 3.5, 2, "#00e5ff"),
+      g(-10,  10, 6, 3.5, 2, "#0097a7"),
 
-      // Server racks (room-like clusters)
-      floor(-38, -10, 2, 6, 12, "#1a3050"),
-      floor(-44, -10, 2, 6, 12, "#1a3050"),
-      floor(-41, -4, 6, 6, 2, "#1a3050"),
-      floor(-41, -16, 6, 6, 2, "#1a3050"),
+      // ── Right lane — magenta containers
+      g( 13,   0, 2, 3.5, 9, "#e040fb"),
+      g( 10,  10, 6, 3.5, 2, "#aa00ff"),
+      g( 10, -10, 6, 3.5, 2, "#ce93d8"),
 
-      floor(38, 10, 2, 6, 12, "#1a3050"),
-      floor(44, 10, 2, 6, 12, "#1a3050"),
-      floor(41, 4, 6, 6, 2, "#1a3050"),
-      floor(41, 16, 6, 6, 2, "#1a3050"),
+      // ── Mid scatter — neon crates
+      g(-5,  12, 2.5, 2.5, 2.5, "#ff4081"),
+      g( 5, -12, 2.5, 2.5, 2.5, "#ff4081"),
+      g(-5, -10, 2.5, 2.5, 2.5, "#76ff03"),
+      g( 5,  10, 2.5, 2.5, 2.5, "#76ff03"),
 
-      // Floating platforms (elevated cover)
-      { pos: [30, 4, -30], size: [10, 0.8, 10], color: "#0a1428" },
-      { pos: [30, 4.4, -30], size: [10, 0.2, 1.5], color: "#2979ff" },  // Edge glow
-      { pos: [-30, 4, 30], size: [10, 0.8, 10], color: "#0a1428" },
-      { pos: [-30, 4.4, 30], size: [10, 0.2, 1.5], color: "#e040fb" },
-
-      // Corner bunkers
-      floor(-46, -46, 10, 5, 2, "#101830"),
-      floor(-40, -52, 2, 5, 12, "#101830"),
-      floor(-52, -52, 2, 5, 12, "#101830"),
-
-      floor(46, 46, 10, 5, 2, "#101830"),
-      floor(40, 52, 2, 5, 12, "#101830"),
-      floor(52, 52, 2, 5, 12, "#101830"),
-
-      // Scattered neon crates
-      floor(18, 18, 3, 3, 3, "#ff6d00"),
-      floor(-18, -18, 3, 3, 3, "#ff6d00"),
-      floor(18, -18, 3, 3, 3, "#00bcd4"),
-      floor(-18, 18, 3, 3, 3, "#00bcd4"),
-      floor(35, 0, 3, 3, 3, "#76ff03"),
-      floor(-35, 0, 3, 3, 3, "#76ff03"),
-      floor(0, 35, 3, 3, 3, "#ff4081"),
-      floor(0, -35, 3, 3, 3, "#ff4081"),
-
-      // Low cover walls
-      floor(15, -5, 10, 2, 2, "#0d1a2e"),
-      floor(-15, 5, 10, 2, 2, "#0d1a2e"),
-      floor(5, 15, 2, 2, 10, "#0d1a2e"),
-      floor(-5, -15, 2, 2, 10, "#0d1a2e"),
+      // ── Corner spawn covers (dark with neon tops)
+      ...spawnCorner(-16, -16,  1,  1, "#0d1428"),
+      ...spawnCorner( 16, -16, -1,  1, "#0d1428"),
+      ...spawnCorner(-16,  16,  1, -1, "#0d1428"),
+      ...spawnCorner( 16,  16, -1, -1, "#0d1428"),
     ],
   },
 };
