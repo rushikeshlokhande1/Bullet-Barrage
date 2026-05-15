@@ -1,15 +1,17 @@
 import * as THREE from "three";
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { FirstPersonGun } from "./FirstPersonGun";
 import type { PlayerState, WeaponId } from "../types/game";
 import { WEAPONS } from "../types/game";
+import type { MapBox } from "../data/maps";
 
 const SPEED = 9;
 const JUMP_FORCE = 7;
 const GRAVITY = -20;
 const PLAYER_HEIGHT = 1.75;
-const MAP_BOUND = 20;
+const PLAYER_RADIUS = 0.38;
+const MAP_BOUND = 29;
 
 interface Props {
   self: PlayerState;
@@ -25,6 +27,14 @@ interface Props {
   currentWeapon: WeaponId;
   isShooting: boolean;
   setIsShooting: (v: boolean) => void;
+  boxes: MapBox[];
+}
+
+/** Precomputed AABB extents for collision */
+interface AABB {
+  x0: number; x1: number;
+  y0: number; y1: number;
+  z0: number; z1: number;
 }
 
 const keys: Record<string, boolean> = {};
@@ -32,7 +42,7 @@ const keys: Record<string, boolean> = {};
 export function FPSControls({
   self, players, onMove, onShoot, onAmmoChange,
   onMuzzleFlash, onHitConfirmed, onWeaponChange, onImpact,
-  alive, currentWeapon, isShooting, setIsShooting,
+  alive, currentWeapon, isShooting, setIsShooting, boxes,
 }: Props) {
   const { camera, gl, scene } = useThree();
   const pos = useRef(new THREE.Vector3(self.position.x, PLAYER_HEIGHT, self.position.z));
@@ -48,7 +58,6 @@ export function FPSControls({
   const weaponRef = useRef<WeaponId>(currentWeapon);
   const shootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Live refs so event handlers can access R3F state
   const cameraRef = useRef(camera);
   const sceneRef = useRef(scene);
   useEffect(() => { cameraRef.current = camera; }, [camera]);
@@ -56,6 +65,21 @@ export function FPSControls({
 
   const onImpactRef = useRef(onImpact);
   useEffect(() => { onImpactRef.current = onImpact; }, [onImpact]);
+
+  // Precompute AABB for every solid box (skip noCollide entries)
+  const collidables = useMemo<AABB[]>(() =>
+    boxes
+      .filter((b) => !b.noCollide)
+      .map((b) => ({
+        x0: b.pos[0] - b.size[0] / 2,
+        x1: b.pos[0] + b.size[0] / 2,
+        y0: b.pos[1] - b.size[1] / 2,
+        y1: b.pos[1] + b.size[1] / 2,
+        z0: b.pos[2] - b.size[2] / 2,
+        z1: b.pos[2] + b.size[2] / 2,
+      })),
+    [boxes],
+  );
 
   useEffect(() => {
     weaponRef.current = currentWeapon;
@@ -126,19 +150,16 @@ export function FPSControls({
     }, WEAPONS[weaponRef.current].reloadTime);
   }, [onAmmoChange]);
 
-  // Raycast into scene to find bullet impact point
   const getImpactPoint = useCallback((dir: THREE.Vector3): THREE.Vector3 | null => {
     const rc = new THREE.Raycaster();
     rc.set(cameraRef.current.position, dir.clone().normalize());
     rc.far = 180;
     const hits = rc.intersectObjects(sceneRef.current.children, true);
     for (const hit of hits) {
-      // Skip player-tagged objects and very close hits (gun model)
       if (hit.distance < 0.5) continue;
       if (hit.object.userData.noImpact) continue;
       return hit.point.clone();
     }
-    // Fallback: project forward 40 units
     return cameraRef.current.position.clone().addScaledVector(dir, 40);
   }, []);
 
@@ -189,7 +210,6 @@ export function FPSControls({
         if (closestId) {
           onShoot(closestId, wep.damage);
           onHitConfirmed();
-          // Impact on player
           const pl = players.get(closestId);
           if (pl) {
             onImpactRef.current(
@@ -197,7 +217,6 @@ export function FPSControls({
             );
           }
         } else {
-          // Impact on environment — raycast
           const impactPt = getImpactPoint(dir);
           if (impactPt) onImpactRef.current(impactPt);
         }
@@ -215,7 +234,7 @@ export function FPSControls({
     camera.quaternion.setFromEuler(euler);
 
     const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, yaw.current, 0));
-    const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, yaw.current, 0));
+    const right   = new THREE.Vector3(1, 0,  0).applyEuler(new THREE.Euler(0, yaw.current, 0));
 
     const move = new THREE.Vector3();
     if (keys["KeyW"]) move.addScaledVector(forward, 1);
@@ -234,17 +253,73 @@ export function FPSControls({
     }
     vel.current.y += GRAVITY * dt;
 
+    // ── Axis-separated movement + AABB box collision ──────────────────────
+
+    // ── X axis ──
     pos.current.x += vel.current.x * dt;
+    for (const b of collidables) {
+      const px0 = pos.current.x - PLAYER_RADIUS;
+      const px1 = pos.current.x + PLAYER_RADIUS;
+      const py0 = pos.current.y - PLAYER_HEIGHT;
+      const py1 = pos.current.y;
+      const pz0 = pos.current.z - PLAYER_RADIUS;
+      const pz1 = pos.current.z + PLAYER_RADIUS;
+      if (px1 > b.x0 && px0 < b.x1 && py1 > b.y0 && py0 < b.y1 && pz1 > b.z0 && pz0 < b.z1) {
+        pos.current.x = vel.current.x > 0 ? b.x0 - PLAYER_RADIUS : b.x1 + PLAYER_RADIUS;
+        vel.current.x = 0;
+      }
+    }
+    pos.current.x = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.x));
+
+    // ── Z axis ──
     pos.current.z += vel.current.z * dt;
+    for (const b of collidables) {
+      const px0 = pos.current.x - PLAYER_RADIUS;
+      const px1 = pos.current.x + PLAYER_RADIUS;
+      const py0 = pos.current.y - PLAYER_HEIGHT;
+      const py1 = pos.current.y;
+      const pz0 = pos.current.z - PLAYER_RADIUS;
+      const pz1 = pos.current.z + PLAYER_RADIUS;
+      if (px1 > b.x0 && px0 < b.x1 && py1 > b.y0 && py0 < b.y1 && pz1 > b.z0 && pz0 < b.z1) {
+        pos.current.z = vel.current.z > 0 ? b.z0 - PLAYER_RADIUS : b.z1 + PLAYER_RADIUS;
+        vel.current.z = 0;
+      }
+    }
+    pos.current.z = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.z));
+
+    // ── Y axis (gravity, floor, box tops) ──
     pos.current.y += vel.current.y * dt;
 
+    // Ground plane
     if (pos.current.y < PLAYER_HEIGHT) {
       pos.current.y = PLAYER_HEIGHT;
       vel.current.y = 0;
       isGrounded.current = true;
     }
-    pos.current.x = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.x));
-    pos.current.z = Math.max(-MAP_BOUND, Math.min(MAP_BOUND, pos.current.z));
+
+    // Land on top of boxes / hit underside of boxes
+    for (const b of collidables) {
+      const px0 = pos.current.x - PLAYER_RADIUS;
+      const px1 = pos.current.x + PLAYER_RADIUS;
+      const pz0 = pos.current.z - PLAYER_RADIUS;
+      const pz1 = pos.current.z + PLAYER_RADIUS;
+      if (px1 <= b.x0 || px0 >= b.x1 || pz1 <= b.z0 || pz0 >= b.z1) continue;
+
+      const feet = pos.current.y - PLAYER_HEIGHT;
+      const head = pos.current.y;
+
+      // Landing on top of a box
+      if (vel.current.y <= 0 && feet < b.y1 && feet >= b.y0 - 0.05) {
+        pos.current.y = b.y1 + PLAYER_HEIGHT;
+        vel.current.y = 0;
+        isGrounded.current = true;
+      }
+      // Hitting the underside of a box
+      else if (vel.current.y > 0 && head > b.y0 && head <= b.y1 + 0.05) {
+        pos.current.y = b.y0;
+        vel.current.y = 0;
+      }
+    }
 
     camera.position.copy(pos.current);
 

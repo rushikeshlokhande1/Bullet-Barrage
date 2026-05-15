@@ -227,6 +227,7 @@ export function Game({ nickname, mapId, mode, botCount, difficulty }: Props) {
             currentWeapon={currentWeapon}
             isShooting={isShooting}
             setIsShooting={setIsShooting}
+            boxes={map.boxes}
           />
         )}
       </Canvas>
