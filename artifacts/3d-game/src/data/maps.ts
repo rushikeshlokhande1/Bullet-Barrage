@@ -8,6 +8,14 @@ export interface MapBox {
   noCollide?: boolean;
 }
 
+export interface MovementPad {
+  id: string;
+  pos: [number, number, number];
+  radius: number;
+  impulse: [number, number, number];
+  type: "jump" | "launch";
+}
+
 export interface MapDef {
   id: MapId;
   name: string;
@@ -17,6 +25,7 @@ export interface MapDef {
   fogFar: number;
   floorColor: string;
   boxes: MapBox[];
+  movementPads: MovementPad[];
   spawnPoints: Array<[number, number, number]>;
 }
 
@@ -51,17 +60,22 @@ function spawnCorner(
 
 const MAPS: Record<MapId, MapDef> = {
 
-  // ── MAP 1: Egg Town ────────────────────────────────────────────────────────
+  // MAP 1: Shard Town
   // Bright white arena. Red central building (open E/W), blue-left containers,
   // red-right containers, orange scatter crates. Three clear lanes.
   cracked: {
     id: "cracked",
-    name: "Egg Town",
+    name: "Shard Town",
     sky: "#7ec8e3",
     fogColor: "#7ec8e3",
     fogNear: 45,
     fogFar: 110,
     floorColor: "#f0ece0",
+    movementPads: [
+      { id: "cracked-jump-mid-n", pos: [0, 0.08, -18], radius: 1.45, impulse: [0, 10.5, 0], type: "jump" },
+      { id: "cracked-launch-west", pos: [-23, 0.08, 0], radius: 1.65, impulse: [13, 8.5, 0], type: "launch" },
+      { id: "cracked-launch-east", pos: [23, 0.08, 0], radius: 1.65, impulse: [-13, 8.5, 0], type: "launch" },
+    ],
     spawnPoints: [
       [-25, 1, -25], [25, 1, -25], [-25, 1, 25], [25, 1, 25],
       [0, 1, -28], [0, 1, 28], [-28, 1, 0], [28, 1, 0],
@@ -126,6 +140,11 @@ const MAPS: Record<MapId, MapDef> = {
     fogNear: 45,
     fogFar: 105,
     floorColor: "#e0c878",
+    movementPads: [
+      { id: "sandstone-jump-center", pos: [0, 0.08, 0], radius: 1.45, impulse: [0, 11.2, 0], type: "jump" },
+      { id: "sandstone-launch-north", pos: [0, 0.08, -24], radius: 1.6, impulse: [0, 8.5, 13], type: "launch" },
+      { id: "sandstone-launch-south", pos: [0, 0.08, 24], radius: 1.6, impulse: [0, 8.5, -13], type: "launch" },
+    ],
     spawnPoints: [
       [-25, 1, -25], [25, 1, -25], [-25, 1, 25], [25, 1, 25],
       [0, 1, -28], [0, 1, 28], [-28, 1, 0], [28, 1, 0],
@@ -175,17 +194,22 @@ const MAPS: Record<MapId, MapDef> = {
     ],
   },
 
-  // ── MAP 3: Yolk-topia ─────────────────────────────────────────────────────
+  // MAP 3: Crystal-topia
   // Dark sci-fi rooftop. Neon-edged walls, cyan/magenta containers,
   // central raised platform players can stand on.
   cyber: {
     id: "cyber",
-    name: "Yolk-topia",
+    name: "Crystal-topia",
     sky: "#0d0820",
     fogColor: "#0d0820",
     fogNear: 38,
     fogFar: 95,
     floorColor: "#0a0618",
+    movementPads: [
+      { id: "cyber-jump-platform", pos: [0, 2.08, 0], radius: 1.5, impulse: [0, 12.4, 0], type: "jump" },
+      { id: "cyber-launch-west", pos: [-24, 0.08, -24], radius: 1.55, impulse: [14, 9.5, 14], type: "launch" },
+      { id: "cyber-launch-east", pos: [24, 0.08, 24], radius: 1.55, impulse: [-14, 9.5, -14], type: "launch" },
+    ],
     spawnPoints: [
       [-25, 1, -25], [25, 1, -25], [-25, 1, 25], [25, 1, 25],
       [0, 1, -28], [0, 1, 28], [-28, 1, 0], [28, 1, 0],
@@ -242,10 +266,124 @@ const MAPS: Record<MapId, MapDef> = {
       ...spawnCorner( 22,  22, -1, -1, "#0d1428"),
     ],
   },
+
+  overpass: {
+    id: "overpass",
+    name: "Overpass",
+    sky: "#9fb8c8",
+    fogColor: "#9fb8c8",
+    fogNear: 48,
+    fogFar: 120,
+    floorColor: "#30343a",
+    movementPads: [
+      { id: "overpass-jump-mid", pos: [0, 0.08, 0], radius: 1.35, impulse: [0, 10.8, 0], type: "jump" },
+      { id: "overpass-launch-left", pos: [-24, 0.08, 18], radius: 1.55, impulse: [12, 8.5, -10], type: "launch" },
+      { id: "overpass-launch-right", pos: [24, 0.08, -18], radius: 1.55, impulse: [-12, 8.5, 10], type: "launch" },
+    ],
+    spawnPoints: [
+      [-25, 1, -25], [25, 1, 25], [-24, 1, 24], [24, 1, -24],
+      [-28, 1, -6], [28, 1, 6], [-6, 1, 28], [6, 1, -28],
+    ],
+    boxes: [
+      nc([0, -0.5, 0], [60, 1, 60], "#30343a"),
+      nc([0, 3.5, 30], [60, 8, 1.5], "#26313a"),
+      nc([0, 3.5, -30], [60, 8, 1.5], "#26313a"),
+      nc([30, 3.5, 0], [1.5, 8, 60], "#26313a"),
+      nc([-30, 3.5, 0], [1.5, 8, 60], "#26313a"),
+
+      // Mid overpass: high ground with clear, readable supports.
+      { pos: [0, 3.2, 0], size: [30, 0.7, 5.5], color: "#58616b" },
+      g(-13, 0, 2, 3.2, 5.5, "#3c444d"),
+      g(13, 0, 2, 3.2, 5.5, "#3c444d"),
+      g(0, -6.5, 8, 2.8, 2, "#434b54"),
+      g(0, 6.5, 8, 2.8, 2, "#434b54"),
+
+      // Mid choke blockers create two doorways under the bridge.
+      g(-4.5, 0, 2.2, 3.8, 8, "#2d333a"),
+      g(4.5, 0, 2.2, 3.8, 8, "#2d333a"),
+
+      // Side lanes and flank pockets.
+      g(-19, -12, 2, 3, 16, "#1f5f86"),
+      g(-14, -22, 11, 3, 2, "#2676a3"),
+      g(-22, 10, 2, 2.5, 11, "#1f5f86"),
+      g(19, 12, 2, 3, 16, "#9b4b20"),
+      g(14, 22, 11, 3, 2, "#b76028"),
+      g(22, -10, 2, 2.5, 11, "#9b4b20"),
+
+      // Spawn safety pockets.
+      ...spawnCorner(-23, -23, 1, 1, "#6b747c"),
+      ...spawnCorner(23, 23, -1, -1, "#6b747c"),
+      ...spawnCorner(-23, 23, 1, -1, "#5d6870"),
+      ...spawnCorner(23, -23, -1, 1, "#5d6870"),
+
+      // Low mid cover for rotations without blocking silhouettes.
+      g(-8, 14, 4, 1.2, 3, "#7d8790"),
+      g(8, -14, 4, 1.2, 3, "#7d8790"),
+      g(0, 20, 7, 1.4, 2, "#6e7882"),
+      g(0, -20, 7, 1.4, 2, "#6e7882"),
+    ],
+  },
+
+  foundry: {
+    id: "foundry",
+    name: "Foundry",
+    sky: "#30150d",
+    fogColor: "#30150d",
+    fogNear: 42,
+    fogFar: 100,
+    floorColor: "#201816",
+    movementPads: [
+      { id: "foundry-jump-catwalk", pos: [-10, 0.08, 0], radius: 1.35, impulse: [0, 11.5, 0], type: "jump" },
+      { id: "foundry-launch-flank", pos: [22, 0.08, 0], radius: 1.55, impulse: [-14, 8.5, 0], type: "launch" },
+    ],
+    spawnPoints: [
+      [-25, 1, -24], [25, 1, 24], [-25, 1, 24], [25, 1, -24],
+      [-28, 1, 0], [28, 1, 0], [0, 1, -28], [0, 1, 28],
+    ],
+    boxes: [
+      nc([0, -0.5, 0], [60, 1, 60], "#201816"),
+      nc([0, 3.5, 30], [60, 8, 1.5], "#4a1f14"),
+      nc([0, 3.5, -30], [60, 8, 1.5], "#4a1f14"),
+      nc([30, 3.5, 0], [1.5, 8, 60], "#4a1f14"),
+      nc([-30, 3.5, 0], [1.5, 8, 60], "#4a1f14"),
+
+      // Furnace core: strong central silhouette and hard chokepoint.
+      g(0, 0, 7, 5, 7, "#8b240e"),
+      nc([0, 5.2, 0], [8, 0.3, 8], "#ff6a00"),
+      g(0, -9, 12, 3.2, 2, "#66210f"),
+      g(0, 9, 12, 3.2, 2, "#66210f"),
+
+      // Catwalk high ground crossing one side.
+      { pos: [-12, 3.0, 0], size: [4, 0.7, 26], color: "#5d4a3c" },
+      g(-12, -14, 4, 3, 2, "#4b3c31"),
+      g(-12, 14, 4, 3, 2, "#4b3c31"),
+      g(-18, 0, 2, 2.4, 18, "#3f332d"),
+
+      // Opposite low flank with staggered cover and sight breaks.
+      g(15, -17, 10, 3, 2, "#a05222"),
+      g(18, -5, 2, 2.6, 10, "#a05222"),
+      g(15, 17, 10, 3, 2, "#a05222"),
+      g(18, 5, 2, 2.6, 10, "#a05222"),
+      g(8, -20, 3, 1.2, 3, "#d27a2c"),
+      g(8, 20, 3, 1.2, 3, "#d27a2c"),
+
+      // Spawn protection and readable safe exits.
+      ...spawnCorner(-23, -23, 1, 1, "#6b2d18"),
+      ...spawnCorner(23, 23, -1, -1, "#6b2d18"),
+      ...spawnCorner(-23, 23, 1, -1, "#6b2d18"),
+      ...spawnCorner(23, -23, -1, 1, "#6b2d18"),
+
+      // Small lane cover.
+      g(-4, -18, 3, 1.2, 3, "#b96a2a"),
+      g(4, 18, 3, 1.2, 3, "#b96a2a"),
+      g(-3, 18, 4, 2.2, 2, "#7a3b1d"),
+      g(3, -18, 4, 2.2, 2, "#7a3b1d"),
+    ],
+  },
 };
 
 export function getMap(id: MapId): MapDef {
   return MAPS[id] ?? MAPS["cracked"];
 }
 
-export const ALL_MAP_IDS: MapId[] = ["cracked", "sandstone", "cyber"];
+export const ALL_MAP_IDS: MapId[] = ["cracked", "sandstone", "cyber", "overpass", "foundry"];

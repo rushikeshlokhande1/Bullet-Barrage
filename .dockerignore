@@ -1,0 +1,14 @@
+node_modules
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+.git
+.cache
+.local
+.codex-*.log
+artifacts/3d-game/dist
+artifacts/3d-game/crazygames-single-file
+artifacts/3d-game/bullet-barrage-crazygames.zip
+artifacts/mockup-sandbox
+attached_assets

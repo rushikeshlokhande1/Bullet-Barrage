@@ -9,13 +9,16 @@ interface Props {
 }
 
 const WEAPON_ICONS: Record<string, string> = {
-  rifle: "🥚",
-  shotgun: "🍳",
-  sniper: "🔭",
+  cluckfire: "AR",
+  ovomatic: "SG",
+  yolkpiercer: "SR",
+  shell_lobber: "EX",
+  rapid_yolker: "MG",
+  crackling_burst: "BR",
+  runny_marksman: "DMR",
 };
 
 export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
-  // Build full rows: self first, then everyone else
   const selfRow = {
     id: self.id,
     nickname: self.nickname,
@@ -48,9 +51,9 @@ export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
     <div className="scoreboard-overlay">
       <div className="scoreboard-panel">
         <div className="sb-title">
-          <span className="sb-title-egg">🥚</span>
+          <span className="sb-title-egg">CORE</span>
           SCOREBOARD
-          <span className="sb-title-egg">🥚</span>
+          <span className="sb-title-egg">CORE</span>
         </div>
 
         <table className="sb-table">
@@ -77,7 +80,7 @@ export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
                   className={`sb-row ${row.isSelf ? "sb-self" : ""} ${!row.alive ? "sb-dead" : ""}`}
                 >
                   <td className="sb-col-rank">
-                    {i === 0 ? "👑" : i + 1}
+                    {i === 0 ? "MVP" : i + 1}
                   </td>
                   <td className="sb-col-name">
                     <span className="sb-dot" style={{ background: row.color }} />
@@ -86,7 +89,7 @@ export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
                     {row.isSelf && <span className="sb-you-badge">YOU</span>}
                   </td>
                   <td className="sb-col-wep">
-                    <span className="sb-wep-icon">{WEAPON_ICONS[row.weapon] ?? "🥚"}</span>
+                    <span className="sb-wep-icon">{WEAPON_ICONS[row.weapon] ?? "CW"}</span>
                     <span className="sb-wep-name">{WEAPONS[row.weapon as keyof typeof WEAPONS]?.name ?? row.weapon}</span>
                   </td>
                   <td className={`sb-col-stat sb-kills ${row.kills > 0 ? "sb-nonzero" : ""}`}>
@@ -98,7 +101,7 @@ export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
                   </td>
                   <td className="sb-col-status">
                     <span className={`sb-status-dot ${row.alive ? "sb-alive" : "sb-respawn"}`} />
-                    {row.alive ? "ALIVE" : "DEAD"}
+                    {row.alive ? "ALIVE" : "DOWN"}
                   </td>
                 </tr>
               );
@@ -106,7 +109,7 @@ export function Scoreboard({ self, players, selfKills, selfDeaths }: Props) {
           </tbody>
         </table>
 
-        <div className="sb-hint">Hold TAB to view • Release to close</div>
+        <div className="sb-hint">Hold TAB to view - release to close</div>
       </div>
     </div>
   );
